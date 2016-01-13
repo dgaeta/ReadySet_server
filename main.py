@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import bookshelf
+import PFSServer
 import config
 
 
-app = bookshelf.create_app(config)
+app = PFSServer.create_app(config)
 
 
 # This is only used when running locally. When running live, gunicorn runs

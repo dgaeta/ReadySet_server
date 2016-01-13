@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from bookshelf import storage
+from PFSServer import storage
 from gcloud import datastore
 from flask import Blueprint, current_app, redirect, render_template, request, \
     url_for

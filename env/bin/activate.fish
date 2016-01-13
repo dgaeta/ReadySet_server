@@ -32,7 +32,7 @@ end
 # unset irrelevant variables
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV "/Users/danielgaeta/getting-started-python/3-binary-data/env"
+set -gx VIRTUAL_ENV "/Users/danielgaeta/getting-started-python/PFSServer/env"
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/bin" $PATH

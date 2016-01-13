@@ -18,36 +18,36 @@
 
 {% block content %}
 
-<h3>Book</h3>
+<h3>User</h3>
 
 <div class="btn-group">
-  <a href="/books/{{book.id}}/edit" class="btn btn-primary btn-sm">
+  <a href="/users/{{user.id}}/edit" class="btn btn-primary btn-sm">
     <i class="glyphicon glyphicon-edit"></i>
-    Edit book
+    Edit user
   </a>
-  <a href="/books/{{book.id}}/delete" class="btn btn-danger btn-sm">
+  <a href="/users/{{user.id}}/delete" class="btn btn-danger btn-sm">
     <i class="glyphicon glyphicon-trash"></i>
-    Delete book
+    Delete user
   </a>
 </div>
 
 <div class="media">
-  {# [START book_image] #}
+  {# [START user_image] #}
   <div class="media-left">
-    {% if book.imageUrl %}
-      <img class="book-image" src="{{book.imageUrl}}">
+    {% if user.imageUrl %}
+      <img class="user-image" src="{{user.imageUrl}}">
     {% else %}
-      <img class="book-image" src="http://placekitten.com/g/128/192">
+      <img class="user-image" src="http://placekitten.com/g/128/192">
     {% endif %}
   </div>
-  {# [END book_image] #}
+  {# [END user_image] #}
   <div class="media-body">
-    <h4 class="book-title">
-      {{book.title}}
-      <small>{{book.publishedDate}}</small>
+    <h4 class="user-title">
+      {{user.title}}
+      <small>{{user.publishedDate}}</small>
     </h4>
-    <h5 class="book-author">By {{book.author|default('Unknown', True)}}</h5>
-    <p class="book-description">{{book.description}}</p>
+    <h5 class="user-author">By {{user.author|default('Unknown', True)}}</h5>
+    <p class="user-description">{{user.description}}</p>
   </div>
 </div>
 

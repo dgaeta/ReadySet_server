@@ -31,13 +31,13 @@ def create_app(config, debug=False, testing=False, config_overrides=None):
         model.init_app(app)
 
     # Register the Bookshelf CRUD blueprint.
-    from .crud import crud
-    app.register_blueprint(crud, url_prefix='/users')
+    from .user_crud import user_crud
+    app.register_blueprint(user_crud, url_prefix='/users')
 
     # Add a default root route.
     @app.route("/")
     def index():
-        return redirect(url_for('crud.list'))
+        return redirect(url_for('user_crud.list'))
 
     return app
 

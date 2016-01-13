@@ -21,7 +21,7 @@ from flask import Blueprint, current_app, redirect, render_template, request, \
 # Copied from model_datastore.py
 builtin_list = list # idk what this does 
 
-crud = Blueprint('crud', __name__)
+user_crud = Blueprint('user_crud', __name__)
 
 
 # Copied from model_datastore.py
@@ -107,7 +107,7 @@ def upload_image_file(file):
 
 
 
-@crud.route("/")
+@user_crud.route("/")
 def list():
     token = request.args.get('page_token', None)
     
@@ -135,7 +135,7 @@ def list():
 
 
 
-@crud.route('/<id>')
+@user_crud.route('/<id>')
 def view(id):
     # Copied from model_datastore.py
     ds = get_client()
@@ -151,7 +151,7 @@ def view(id):
     return render_template("view.html", user=user)
 
 
-@crud.route('/add', methods=['GET', 'POST'])
+@user_crud.route('/add', methods=['GET', 'POST'])
 def add():
     if request.method == 'POST':
         data = request.form.to_dict(flat=True)
@@ -173,7 +173,7 @@ def add():
     return render_template("form.html", action="Add", user={})
 
 
-@crud.route('/<id>/edit', methods=['GET', 'POST'])
+@user_crud.route('/<id>/edit', methods=['GET', 'POST'])
 def edit(id):
     user = read(id)
 
@@ -192,7 +192,7 @@ def edit(id):
     return render_template("form.html", action="Edit", user=user)
 
 
-@crud.route('/<id>/delete')
+@user_crud.route('/<id>/delete')
 def delete(id):
     delete_helper(id)
     return redirect(url_for('.list'))

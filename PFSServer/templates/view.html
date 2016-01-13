@@ -42,12 +42,12 @@
   </div>
   {# [END user_image] #}
   <div class="media-body">
-    <h4 class="user-title">
-      {{user.title}}
-      <small>{{user.publishedDate}}</small>
+    <h4 class="user-name">
+      {{user.name}}
+      <small>{{user.email}}</small>
     </h4>
-    <h5 class="user-author">By {{user.author|default('Unknown', True)}}</h5>
-    <p class="user-description">{{user.description}}</p>
+    <!-- <h5 class="user-author">By {{user.author|default('Unknown', True)}}</h5>
+    <p class="user-description">{{user.description}}</p> -->
   </div>
 </div>
 

@@ -56,9 +56,9 @@ def from_datastore(entity):
 def upsert(data, id=None):
     ds = get_client()
     if id:
-        key = ds.key('Book', int(id))
+        key = ds.key('User', int(id))
     else:
-        key = ds.key('Book')
+        key = ds.key('User')
 
     entity = datastore.Entity(
         key=key,
@@ -71,7 +71,7 @@ def upsert(data, id=None):
 # Copied from model_datastore.py
 def read(id):
     ds = get_client()
-    key = ds.key('Book', int(id))
+    key = ds.key('User', int(id))
     results = ds.get(key)
     return from_datastore(results)
 
@@ -79,7 +79,7 @@ def read(id):
 # Copied from model_datastore.py
 def delete_helper(id):
     ds = get_client()
-    key = ds.key('Book', int(id))
+    key = ds.key('User', int(id))
     ds.delete(key)
 
 
@@ -115,21 +115,21 @@ def list():
     limit = 10 
     # Copied from model_datastore.py
     ds = get_client()
-    query = ds.query(kind='Book', order=['title'])
+    query = ds.query(kind='User', order=['name'])
     it = query.fetch(limit=limit, start_cursor=token)
     entities, more_results, cursor = it.next_page()
     entities = builtin_list(map(from_datastore, entities))
 
     # End copy
-    books = entities
+    users = entities
     next_page_token = cursor if len(entities) == limit else None
 
     # This is the old get.
-    # books, next_page_token = get_model().list(cursor=token)
+    # users, next_page_token = get_model().list(cursor=token)
 
     return render_template(
         "list.html",
-        books=books,
+        users=users,
         next_page_token=next_page_token)
 
 
@@ -139,16 +139,16 @@ def list():
 def view(id):
     # Copied from model_datastore.py
     ds = get_client()
-    key = ds.key('Book', int(id))
+    key = ds.key('User', int(id))
     results = ds.get(key)
     # End copy.
 
     # below was modified from: return from_datastore(results)
-    book = from_datastore(results)
+    user = from_datastore(results)
 
 
-    #book = get_model().read(id)
-    return render_template("view.html", book=book)
+    #user = get_model().read(id)
+    return render_template("view.html", user=user)
 
 
 @crud.route('/add', methods=['GET', 'POST'])
@@ -166,16 +166,16 @@ def add():
             data['imageUrl'] = image_url
         # [END image_url2]
 
-        book = upsert(data)
+        user = upsert(data)
 
-        return redirect(url_for('.view', id=book['id']))
+        return redirect(url_for('.view', id=user['id']))
 
-    return render_template("form.html", action="Add", book={})
+    return render_template("form.html", action="Add", user={})
 
 
 @crud.route('/<id>/edit', methods=['GET', 'POST'])
 def edit(id):
-    book = read(id)
+    user = read(id)
 
     if request.method == 'POST':
         data = request.form.to_dict(flat=True)
@@ -185,11 +185,11 @@ def edit(id):
         if image_url:
             data['imageUrl'] = image_url
 
-        book = upsert(data, id)
+        user = upsert(data, id)
 
-        return redirect(url_for('.view', id=book['id']))
+        return redirect(url_for('.view', id=user['id']))
 
-    return render_template("form.html", action="Edit", book=book)
+    return render_template("form.html", action="Edit", user=user)
 
 
 @crud.route('/<id>/delete')

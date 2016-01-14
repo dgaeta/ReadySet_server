@@ -16,7 +16,14 @@ from PFSServer import storage
 from gcloud import datastore
 from passlib.apps import custom_app_context as pwd_context
 from flask import Blueprint, current_app, redirect, render_template, request, \
-    url_for, json, jsonify
+    url_for, json, jsonify, g 
+from flask.ext.httpauth import HTTPBasicAuth
+from itsdangerous import (TimedJSONWebSignatureSerializer
+                          as Serializer, BadSignature, SignatureExpired)
+
+
+
+auth = HTTPBasicAuth()
 
 
 # Copied from model_datastore.py
@@ -25,14 +32,70 @@ builtin_list = list # idk what this does
 user_crud = Blueprint('user_crud', __name__)
 
 
+@user_crud.route('/resource')
+@auth.login_required
+def get_resource():
+    return jsonify({ 'data': 'Hello, %s!' % g.user['email'] })
 
 # START AUTH 
 def hash_password(password):
     return pwd_context.encrypt(password)
 
-def verify_password(password_plain, password_hash):
+def verify_password_helper(password_plain, password_hash):
     return pwd_context.verify(password_plain, password_hash)
 
+
+@auth.verify_password
+def verify_password(email_or_token, password):
+
+    # first try to authenticate by token
+    user = verify_auth_token(email_or_token)
+    if not user:
+        # try to authenticate with username/password
+
+        ds = get_client()
+        key = ds.key('User', str(email_or_token))
+        results = ds.get(key)
+        # End copy.
+
+        # below was modified from: return from_datastore(results)
+        user = from_datastore(results)
+
+        if not user or not verify_password_helper(password, user['password']):
+            return False
+    g.user = user
+    return True
+
+
+def generate_auth_token(email, expiration = 600):
+    s = Serializer(current_app.config['SECRET_KEY'], expires_in = expiration)
+    return s.dumps({ 'email': email })
+
+
+def verify_auth_token(token):
+    s = Serializer(current_app.config['SECRET_KEY'])
+    try:
+        data = s.loads(token)
+    except SignatureExpired:
+        return None # valid token, but expired
+    except BadSignature:
+        return None # invalid token
+
+    ds = get_client()
+    key = ds.key('User', str(data['email']))
+    results = ds.get(key)
+    # End copy.
+
+    # below was modified from: return from_datastore(results)
+    user = from_datastore(results)
+
+    return user
+
+@user_crud.route('/signin')
+@auth.login_required
+def get_auth_token():
+    token = generate_auth_token(g.user['email'])
+    return jsonify({ 'status': 'success','token': token.decode('ascii') })
 # END AUTH 
 
 
@@ -68,13 +131,11 @@ def from_datastore(entity):
 def upsert(data, id=None):
     ds = get_client()
     if id:
-        key = ds.key('User', int(id))
+        key = ds.key('User', str(id))
     else:
-        key = ds.key('User')
+        key = ds.key('User', data['email'])
 
-    entity = datastore.Entity(
-        key=key,
-        exclude_from_indexes=['description'])
+    entity = datastore.Entity(key=key)
 
     entity.update(data)
     ds.put(entity)
@@ -83,7 +144,7 @@ def upsert(data, id=None):
 # Copied from model_datastore.py
 def read(id):
     ds = get_client()
-    key = ds.key('User', int(id))
+    key = ds.key('User', str(id))
     results = ds.get(key)
     return from_datastore(results)
 
@@ -91,7 +152,7 @@ def read(id):
 # Copied from model_datastore.py
 def delete_helper(id):
     ds = get_client()
-    key = ds.key('User', int(id))
+    key = ds.key('User', str(id))
     ds.delete(key)
 
 
@@ -152,7 +213,7 @@ def list():
 def view(id):
     # Copied from model_datastore.py
     ds = get_client()
-    key = ds.key('User', int(id))
+    key = ds.key('User', str(id))
     results = ds.get(key)
     # End copy.
 
@@ -162,13 +223,21 @@ def view(id):
 
     #user = get_model().read(id)
     # return render_template("view.html", user=user)
-    return jsonify(status=200, user= json.dumps(user))
+    return jsonify(status="success", user= json.dumps(user))
 
 
 @user_crud.route('/add', methods=['GET', 'POST'])
 def add():
     if request.method == 'POST':
         data = request.form.to_dict(flat=True)
+
+
+        ds = get_client()
+        key = ds.key('User', str(id))
+        results = ds.get(key)
+        user = from_datastore(results)
+        if user != "null":
+            return jsonify( status= "fail", error= "Email already exists.")
 
         # If an image was uploaded, update the data to point to the new image.
         # [START image_url]
@@ -185,7 +254,7 @@ def add():
         user = upsert(data)
 
         # return redirect(url_for('.view', id=user['id']))
-        return jsonify( status= 200, id= user['id'])
+        return jsonify( status= "success", id= user['email'])
 
     return render_template("form.html", action="Add", user={})
 
@@ -205,14 +274,14 @@ def edit(id):
         user = upsert(data, id)
 
         # return redirect(url_for('.view', id=user['id']))
-        return jsonify( status= 200, id= user['id'])
+        return jsonify( status= "success", id= user['email'])
 
     # return render_template("form.html", action="Edit", user=user)
-    return jsonify( status=200, message= "Needs to be POST")
+    return jsonify( status="fail", message= "Needs to be POST")
 
 
 @user_crud.route('/<id>/delete')
 def delete(id):
     delete_helper(id)
     # return redirect(url_for('.list'))
-    return jsonify( status= 200)
+    return jsonify( status= "success")

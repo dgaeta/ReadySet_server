@@ -15,7 +15,7 @@
 from PFSServer import storage
 from gcloud import datastore
 from flask import Blueprint, current_app, redirect, render_template, request, \
-    url_for
+    url_for, json, jsonify
 
 
 # Copied from model_datastore.py
@@ -127,10 +127,11 @@ def list():
     # This is the old get.
     # users, next_page_token = get_model().list(cursor=token)
 
-    return render_template(
-        "list.html",
-        users=users,
-        next_page_token=next_page_token)
+    # return render_template(
+    #     "list.html",
+    #     users=users,
+    #     next_page_token=next_page_token)
+    return jsonify(users = json.dumps(users))
 
 
 
@@ -148,7 +149,8 @@ def view(id):
 
 
     #user = get_model().read(id)
-    return render_template("view.html", user=user)
+    # return render_template("view.html", user=user)
+    return jsonify(status=200, user= json.dumps(user))
 
 
 @user_crud.route('/add', methods=['GET', 'POST'])
@@ -168,7 +170,8 @@ def add():
 
         user = upsert(data)
 
-        return redirect(url_for('.view', id=user['id']))
+        # return redirect(url_for('.view', id=user['id']))
+        return jsonify( status= 200, id= user['id'])
 
     return render_template("form.html", action="Add", user={})
 
@@ -187,12 +190,15 @@ def edit(id):
 
         user = upsert(data, id)
 
-        return redirect(url_for('.view', id=user['id']))
+        # return redirect(url_for('.view', id=user['id']))
+        return jsonify( status= 200, id= user['id'])
 
-    return render_template("form.html", action="Edit", user=user)
+    # return render_template("form.html", action="Edit", user=user)
+    return jsonify( status=200, message= "Needs to be POST")
 
 
 @user_crud.route('/<id>/delete')
 def delete(id):
     delete_helper(id)
-    return redirect(url_for('.list'))
+    # return redirect(url_for('.list'))
+    return jsonify( status= 200)

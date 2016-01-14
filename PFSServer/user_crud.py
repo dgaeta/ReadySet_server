@@ -14,6 +14,7 @@
 
 from PFSServer import storage
 from gcloud import datastore
+from passlib.apps import custom_app_context as pwd_context
 from flask import Blueprint, current_app, redirect, render_template, request, \
     url_for, json, jsonify
 
@@ -22,6 +23,17 @@ from flask import Blueprint, current_app, redirect, render_template, request, \
 builtin_list = list # idk what this does 
 
 user_crud = Blueprint('user_crud', __name__)
+
+
+
+# START AUTH 
+def hash_password(password):
+    return pwd_context.encrypt(password)
+
+def verify_password(password_plain, password_hash):
+    return pwd_context.verify(password_plain, password_hash)
+
+# END AUTH 
 
 
 # Copied from model_datastore.py
@@ -168,6 +180,8 @@ def add():
             data['imageUrl'] = image_url
         # [END image_url2]
 
+        # hash user password 
+        data['password'] = hash_password(data['password'])
         user = upsert(data)
 
         # return redirect(url_for('.view', id=user['id']))

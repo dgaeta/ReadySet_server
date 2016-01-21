@@ -1,4 +1,4 @@
-#!/var/www/parachute_server/venv/bin/python
+#!/Users/danielgaeta/Documents/Code/parachute_server/venv/bin/python
 
 # -*- coding: utf-8 -*-
 import re

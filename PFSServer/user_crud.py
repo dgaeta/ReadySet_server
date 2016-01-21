@@ -91,13 +91,6 @@ def verify_auth_token(token):
 
     return user
 
-@user_crud.route('/signin')
-@auth.login_required
-def get_auth_token():
-    token = generate_auth_token(g.user['email'])
-    return jsonify({ 'status': 'success','token': token.decode('ascii') })
-# END AUTH 
-
 
 # Copied from model_datastore.py
 def get_client():
@@ -188,14 +181,13 @@ def list():
     limit = 10 
     # Copied from model_datastore.py
     ds = get_client()
-    query = ds.query(kind='User', order=['name'])
+    query = ds.query(kind='User', order=['email'])
     it = query.fetch(limit=limit, start_cursor=token)
     entities, more_results, cursor = it.next_page()
     entities = builtin_list(map(from_datastore, entities))
 
     # End copy
     users = entities
-    next_page_token = cursor if len(entities) == limit else None
 
     # This is the old get.
     # users, next_page_token = get_model().list(cursor=token)
@@ -228,35 +220,47 @@ def view(id):
 
 @user_crud.route('/add', methods=['GET', 'POST'])
 def add():
-    if request.method == 'POST':
-        data = request.form.to_dict(flat=True)
+    
+    #data = request.form.to_dict(flat=True)
+    data = request.json
+    print(data)
+    print(data['email'])
+    print(data['password'])
+
+    ds = get_client()
+    key = ds.key('User', str(data['email']))
+    results = ds.get(key)
+    user = from_datastore(results)
+    print(user)
+    if user != None:
+        return jsonify( status= "fail", error= "Email already exists.")
+
+    # If an image was uploaded, update the data to point to the new image.
+    # [START image_url]
+    image_url = upload_image_file(request.files.get('image'))
+    # [END image_url]
+
+    # [START image_url2]
+    if image_url:
+        data['imageUrl'] = image_url
+    # [END image_url2]
+
+    # hash user password 
+    data['password'] = hash_password(data['password'])
+    user = upsert(data)
+
+    # return redirect(url_for('.view', id=user['id']))
+    return jsonify( status= "success", id= user['email'])
+
+    
 
 
-        ds = get_client()
-        key = ds.key('User', str(id))
-        results = ds.get(key)
-        user = from_datastore(results)
-        if user != "null":
-            return jsonify( status= "fail", error= "Email already exists.")
-
-        # If an image was uploaded, update the data to point to the new image.
-        # [START image_url]
-        image_url = upload_image_file(request.files.get('image'))
-        # [END image_url]
-
-        # [START image_url2]
-        if image_url:
-            data['imageUrl'] = image_url
-        # [END image_url2]
-
-        # hash user password 
-        data['password'] = hash_password(data['password'])
-        user = upsert(data)
-
-        # return redirect(url_for('.view', id=user['id']))
-        return jsonify( status= "success", id= user['email'])
-
-    return render_template("form.html", action="Add", user={})
+@user_crud.route('/signin')
+@auth.login_required
+def get_auth_token():
+    token = generate_auth_token(g.user['email'])
+    return jsonify({ 'status': 'success','token': token.decode('ascii') })
+# END AUTH 
 
 
 @user_crud.route('/<id>/edit', methods=['GET', 'POST'])
@@ -285,3 +289,79 @@ def delete(id):
     delete_helper(id)
     # return redirect(url_for('.list'))
     return jsonify( status= "success")
+
+
+@user_crud.route('/list_devices')
+#@auth.login_required
+def list_devices():
+    #return jsonify(data=request.args)
+    data = request.json
+    email = data['email']
+    print(data)
+    print(data['email'])
+    print(data['password'])
+
+    ds = get_client()
+    key = ds.key('User', str(email))
+    results = ds.get(key)
+    # End copy.
+
+    # below was modified from: return from_datastore(results)
+    user = from_datastore(results)
+
+    
+    if user.get('has_devices'):
+        return jsonify( status="success", message="true", device_count=user['device_count'])
+    else:
+        return jsonify( status="success", message="false", device_count=0)
+    
+
+    return jsonify(status="none")
+
+@user_crud.route('/create_device')
+def create_device():
+    data = request.json
+    email = data['email']
+    device_name = data['device_name']
+
+    # datastore = get_client()
+    # req = datastore.LookupRequest()
+    # req.key.extend([employee_key])
+
+    # resp = self.datastore.lookup(req)
+    # employee = resp.found[0].entity
+
+    ds = get_client()
+    key = ds.key('User', str(email))
+    results = ds.get(key)
+    # End copy.
+
+    # below was modified from: return from_datastore(results)
+    user = from_datastore(results)
+
+    if user.get('device_count'):
+        user['device_count'] += 1
+        user['devices'] += [email + '_' + device_name]
+        user = upsert(user, email)
+        return jsonify(status="success", email=user['email'], device_count=user['device_count'], devices=user['devices'])
+    else:
+        user['device_count'] = 1
+        user = upsert(user, email)
+        return jsonify(status="success", email=user['email'], device_count=user['device_count'])
+
+
+    device_property = datastore.Property()
+    device_property.name = email + '_' + device_name
+    device_property.value.string_value = 'datastore-key'
+
+    device_count_property = ds.Property()
+    device_count_property.name = 'device_count'
+    device_count_property.value.integer_value = 1
+
+    
+    user.property.extend([device_property, device_count_property])
+    req = ds.CommitRequest()
+    req.mode = ds.CommitRequest.NON_TRANSACTIONAL
+    req.mutation.update.extend([user])
+    ds.commit(req)
+    return jsonify(status='success', device_id=device_property.value.string_value)

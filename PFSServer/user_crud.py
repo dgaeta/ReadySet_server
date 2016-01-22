@@ -247,6 +247,7 @@ def add():
 
     # hash user password 
     data['password'] = hash_password(data['password'])
+    data['device_count'] = 0
     user = upsert(data)
 
     # return redirect(url_for('.view', id=user['id']))
@@ -263,43 +264,56 @@ def get_auth_token():
 # END AUTH 
 
 
-@user_crud.route('/<id>/edit', methods=['GET', 'POST'])
-def edit(id):
-    user = read(id)
+@user_crud.route('/edit', methods=['GET', 'POST'])
+def edit():
+    data = request.json
 
-    if request.method == 'POST':
-        data = request.form.to_dict(flat=True)
+    ds = get_client()
+    key = ds.key('User', str(data['email']))
+    results = ds.get(key)
+    user = from_datastore(results)
 
-        image_url = upload_image_file(request.files.get('image'))
+    property_key = data['property_key']
+    property_value = data['property_value']
 
-        if image_url:
-            data['imageUrl'] = image_url
+    if user.get(property_key):
+        
+        user[property_key] = property_value
+
+        # image_url = upload_image_file(request.files.get('image'))
+        # if image_url:
+        #     data['imageUrl'] = image_url
 
         user = upsert(data, id)
 
-        # return redirect(url_for('.view', id=user['id']))
         return jsonify( status= "success", id= user['email'])
+    else: 
+        return jsonify( status="fail", message= "Needs to be POST")
 
-    # return render_template("form.html", action="Edit", user=user)
-    return jsonify( status="fail", message= "Needs to be POST")
 
+@user_crud.route('/delete')
+def delete():
+    data = request.json
 
-@user_crud.route('/<id>/delete')
-def delete(id):
-    delete_helper(id)
+    ds = get_client()
+    key = ds.key('User', str(data['email']))
+    ds.delete(key)
+    # results = ds.get(key)
+    # user = from_datastore(results)
+    # delete_helper(data['email'])
     # return redirect(url_for('.list'))
     return jsonify( status= "success")
 
 
 @user_crud.route('/list_devices')
-#@auth.login_required
+@auth.login_required
 def list_devices():
     #return jsonify(data=request.args)
     data = request.json
     email = data['email']
     print(data)
     print(data['email'])
-    print(data['password'])
+   
 
     ds = get_client()
     key = ds.key('User', str(email))
@@ -339,29 +353,14 @@ def create_device():
     # below was modified from: return from_datastore(results)
     user = from_datastore(results)
 
-    if user.get('device_count'):
+    if user != None:
         user['device_count'] += 1
-        user['devices'] += [email + '_' + device_name]
+        if user.get('devices'):
+            user['devices'] += [str(email + '_' + device_name)]
+        else: 
+            user['devices'] = [str(email + '_' + device_name)]
         user = upsert(user, email)
         return jsonify(status="success", email=user['email'], device_count=user['device_count'], devices=user['devices'])
     else:
-        user['device_count'] = 1
-        user = upsert(user, email)
-        return jsonify(status="success", email=user['email'], device_count=user['device_count'])
+        return jsonify(status="failute", email=user['email'], message='no user found')
 
-
-    device_property = datastore.Property()
-    device_property.name = email + '_' + device_name
-    device_property.value.string_value = 'datastore-key'
-
-    device_count_property = ds.Property()
-    device_count_property.name = 'device_count'
-    device_count_property.value.integer_value = 1
-
-    
-    user.property.extend([device_property, device_count_property])
-    req = ds.CommitRequest()
-    req.mode = ds.CommitRequest.NON_TRANSACTIONAL
-    req.mutation.update.extend([user])
-    ds.commit(req)
-    return jsonify(status='success', device_id=device_property.value.string_value)

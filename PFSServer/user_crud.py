@@ -310,7 +310,7 @@ def delete():
 def list_devices():
     #return jsonify(data=request.args)
     data = request.json
-    email = data['email']
+    email = g.user['email']
     print(data)
     print(data['email'])
    
@@ -324,19 +324,21 @@ def list_devices():
     user = from_datastore(results)
 
     
-    if user.get('has_devices'):
-        return jsonify( status="success", message="true", device_count=user['device_count'])
+    if user.get('device_count') and user['device_count'] > 0:
+        return jsonify( status="success", message="true", device_count=user['device_count'], devices=user['devices'])
     else:
-        return jsonify( status="success", message="false", device_count=0)
+        return jsonify( status="success", message="no devices", device_count=0)
     
 
     return jsonify(status="none")
 
 @user_crud.route('/create_device')
+@auth.login_required
 def create_device():
     data = request.json
-    email = data['email']
+    email = g.user['email']
     device_name = data['device_name']
+    random_id = data['random_id']
 
     # datastore = get_client()
     # req = datastore.LookupRequest()
@@ -354,13 +356,18 @@ def create_device():
     user = from_datastore(results)
 
     if user != None:
-        user['device_count'] += 1
-        if user.get('devices'):
-            user['devices'] += [str(email + '_' + device_name)]
-        else: 
-            user['devices'] = [str(email + '_' + device_name)]
+        if not user.get('devices'):
+            user['devices'] = {}
+
+        user['devices'] = json.loads(user['devices'])
+        if random_id in user['devices']:
+            return jsonify(status='error, random_id already taken')
+        else:
+            user['device_count'] += 1
+            user['devices'][random_id] = json.dumps({'random_id':random_id, device_name: str(email + '_' + device_name)})
+            user['devices'] = json.dumps(user['devices'])
         user = upsert(user, email)
-        return jsonify(status="success", email=user['email'], device_count=user['device_count'], devices=user['devices'])
+        return jsonify(status="success", email=user['email'], device_count=user['device_count'], devices=user['devices'], random_id=random_id)
     else:
-        return jsonify(status="failute", email=user['email'], message='no user found')
+        return jsonify(status="failure", email=user['email'], message='no user found')
 

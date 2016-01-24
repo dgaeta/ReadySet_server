@@ -312,7 +312,7 @@ def list_devices():
     data = request.json
     email = g.user['email']
     print(data)
-    print(data['email'])
+    #print(data['email'])
    
 
     ds = get_client()

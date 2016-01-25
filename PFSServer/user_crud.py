@@ -364,10 +364,10 @@ def create_device():
             return jsonify(status='error, random_id already taken')
         else:
             user['device_count'] += 1
-            user['devices'][random_id] = json.dumps({'random_id':random_id, 'device_name': device_name})
+            user['devices'][random_id] = {'random_id':random_id, 'device_name': device_name}
             user['devices'] = json.dumps(user['devices'])
         user = upsert(user, email)
-        return jsonify(status="success", email=user['email'], device_count=user['device_count'], devices=json.loads(user['devices']), random_id=random_id)
+        return jsonify(status="success", email=user['email'], device_count=user['device_count'], devices=user['devices'], random_id=random_id)
     else:
         return jsonify(status="failure", email=user['email'], message='no user found')
 

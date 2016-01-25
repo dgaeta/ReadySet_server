@@ -338,7 +338,7 @@ def create_device():
     data = request.json
     email = g.user['email']
     device_name = data['device_name']
-    random_id = data['random_id']
+    random_id = device_name + '_' + email
 
     # datastore = get_client()
     # req = datastore.LookupRequest()

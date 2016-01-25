@@ -357,14 +357,14 @@ def create_device():
 
     if user != None:
         if not user.get('devices'):
-            user['devices'] = {}
+            user['devices'] = "{}"
 
         user['devices'] = json.loads(user['devices'])
         if random_id in user['devices']:
             return jsonify(status='error, random_id already taken')
         else:
             user['device_count'] += 1
-            user['devices'][random_id] = json.dumps({'random_id':random_id, device_name: str(email + '_' + device_name)})
+            user['devices'][random_id] = json.dumps({'random_id':random_id, device_name: device_name})
             user['devices'] = json.dumps(user['devices'])
         user = upsert(user, email)
         return jsonify(status="success", email=user['email'], device_count=user['device_count'], devices=user['devices'], random_id=random_id)

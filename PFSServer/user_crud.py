@@ -325,7 +325,7 @@ def list_devices():
 
     
     if user.get('device_count') and user['device_count'] > 0:
-        return jsonify( status="success", message="true", device_count=user['device_count'], devices=user['devices'])
+        return jsonify( status="success", message="true", device_count=user['device_count'], devices=json.loads(user['devices'])
     else:
         return jsonify( status="success", message="no devices", device_count=0)
     

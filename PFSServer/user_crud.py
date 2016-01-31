@@ -67,7 +67,7 @@ def verify_password(email_or_token, password):
     return True
 
 
-def generate_auth_token(email, expiration = 600):
+def generate_auth_token(email, expiration = 60000):
     s = Serializer(current_app.config['SECRET_KEY'], expires_in = expiration)
     return s.dumps({ 'email': email })
 

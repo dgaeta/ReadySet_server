@@ -30,9 +30,11 @@ def create_app(config, debug=False, testing=False, config_overrides=None):
         model = get_model()
         model.init_app(app)
 
-    # Register the Bookshelf CRUD blueprint.
+    # Register the the CRUD blueprints.
     from .user_crud import user_crud
+    from .device_crud import device_crud
     app.register_blueprint(user_crud, url_prefix='/users')
+    app.register_blueprint(device_crud, url_prefix='/devices')
 
     # Add a default root route.
     @app.route("/")

@@ -247,6 +247,7 @@ def add():
 
     # hash user password 
     data['password'] = hash_password(data['password'])
+    data['devices'] = '{}'
     data['device_count'] = 0
     user = upsert(data)
 

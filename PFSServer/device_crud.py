@@ -252,9 +252,9 @@ def create_device():
 
 	    	user['device_count'] += 1
 	    	user['devices'][device_name] = {'id': device['id'], 'name': device['name']}
-	    	user['devices'] = str(user['devices'])
+	    	user['devices'] = json.dumps(user['devices'])
 	    	user = upsert(user, email)
-	    	return jsonify(status="success", email=user['email'], device_count=ast.literal_eval(user['device_count']), devices=user['devices'], device_id=device['id'])
+	    	return jsonify(status="success", email=user['email'], device_count=user['device_count'], devices=user['devices'], device_id=device['id'])
   	else:
   		return jsonify(status="failure", email=user['email'], message='no user found')
 
@@ -278,7 +278,7 @@ def delete_device():
 
 	if device_name in user['devices']:
 		del user['devices'][device_name]
-		user['devices'] = str(user['devices'])
+		user['devices'] = json.dumps(user['devices'])
 		upsert(user, email)
 		key = ds.key('Device', device_id)
 		ds.delete(key)
@@ -334,7 +334,7 @@ def create_node():
   	if mode == "Create":
   		curr_folder['children'][node['name']] = node
 
-  		device['children'] = str(device['children'])
+  		device['children'] = json.dumps(device['children'])
   		device = device_upsert(device, device['id'])
   		return jsonify(status="success", email=user['email'], current_folder=curr_folder)
   	else:
@@ -420,7 +420,7 @@ def delete_node():
 
  	if node_name in curr_folder['children']:
  		del curr_folder['children'][node_name]
- 		device['children'] = str(device['children'])
+ 		device['children'] = json.dumps(device['children'])
  		device_upsert(device, device_id)
  		return jsonify(status="success", message="deleted node {}".format(node_name))
  	else:
@@ -458,7 +458,7 @@ def rename_node():
  		curr_folder['children'][new_name]['name'] = new_name
  		curr_folder['children'][new_name]['name'] = new_name
  		del curr_folder['children'][old_name]
- 		device['children'] = str(device['children'])
+ 		device['children'] = json.dumps(device['children'])
  		device_upsert(device, device_id)
  		return jsonify(status="success", message="node renamed from {} to {}".format(old_name, new_name) )
  	else:
@@ -503,7 +503,7 @@ def create_symlink():
  			return jsonify(status="failure", message="path {} does not exist for device_id: {}".format(symlink_path, device_id))
 
  		symlink_folder['children'][symlink_name] = {'is_symlink': 1, 'actual_path': path, 'actual_name': node_name}
- 		device['children'] = str(device['children'])
+ 		device['children'] = json.dumps(device['children'])
  		device_upsert(device)
  		return jsonify(status="success", message="symlink created from {} to {}".format(symlink_path, path))
  	else:
@@ -630,8 +630,9 @@ def sync():
 
 	   	if isinstance(curr_folder['children'], str):
 	   				curr_folder['children'] = ast.literal_eval(curr_folder['children'])
+
 	 	if c_type == "create":
-	 		curr_folder['children'][path_array[-1]] = {'name': path_array[-1], "is_file": 1, 'is_dir': 0,"mode": instr['mode'], 'inserted_id': instr['inserted_id'], 'children': '{}'}
+	 		curr_folder['children'][path_array[-1]] = {'name': path_array[-1], "is_file": 1, 'is_dir': 0,"mode": instr['mode'], "file_id": instr['file_id'],'inserted_id': instr['inserted_id'], 'children': '{}'}
 
 
 	  	elif c_type == "utimens":
@@ -666,7 +667,7 @@ def sync():
 
 		last_sync = c_id
 		device['last_sync'] = last_sync
-		device['children'] = str(device['children'])
+		device['children'] = json.dumps(device['children'])
 		device_upsert(device, device_id)
 
 	return jsonify(status="success", last_sync=last_sync)

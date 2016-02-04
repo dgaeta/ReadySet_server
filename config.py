@@ -18,6 +18,8 @@ Update this file with the values for your specific Google Cloud project.
 You can create and manage projects at https://console.developers.google.com
 """
 
+PROPAGATE_EXCEPTIONS = True
+
 # The secret key is used by Flask to encrypt session cookies.
 SECRET_KEY = 'secret'
 

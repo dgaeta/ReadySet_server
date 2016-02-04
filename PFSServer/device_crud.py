@@ -632,7 +632,8 @@ def sync():
 	   				curr_folder['children'] = ast.literal_eval(curr_folder['children'])
 
 	 	if c_type == "create":
-	 		curr_folder['children'][path_array[-1]] = {'name': path_array[-1], "is_file": 1, 'is_dir': 0,"mode": instr['mode'], "file_id": instr['file_id'],'inserted_id': instr['inserted_id'], 'children': '{}'}
+	 		curr_folder['children'][path_array[-1]] = {'name': path_array[-1], "is_file": 1, 'is_dir': 0,
+	 			"mode": instr['mode'], "file_id": instr['file_id'], 'children': '{}'}
 
 
 	  	elif c_type == "utimens":

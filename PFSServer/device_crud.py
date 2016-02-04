@@ -254,7 +254,7 @@ def create_device():
 	    	user['devices'][device_name] = {'id': device['id'], 'name': device['name']}
 	    	user['devices'] = str(user['devices'])
 	    	user = upsert(user, email)
-	    	return jsonify(status="success", email=user['email'], device_count=user['device_count'], devices=user['devices'], device_id=device['id'])
+	    	return jsonify(status="success", email=user['email'], device_count=ast.literal_eval(user['device_count']), devices=user['devices'], device_id=device['id'])
   	else:
   		return jsonify(status="failure", email=user['email'], message='no user found')
 

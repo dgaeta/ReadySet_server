@@ -324,7 +324,7 @@ def get_auth_token():
     user = from_datastore(results)
     device_count = user['device_count'] 
     devices = json.loads(user['devices'])
-    return jsonify(status='success',token=token.decode('ascii'), device_count=device_count, devices=devices)
+    return jsonify(status='success', email=email, token=token.decode('ascii'), device_count=device_count, devices=devices)
 # END AUTH 
 
 

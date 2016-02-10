@@ -189,18 +189,15 @@ def get_root(data= None, mode= "production"):
 	user = get_user(email)
 	if user == None:
 		return jsonify(status="failure", message="user with email: {}, not found".format(email))
+	
+	device = get_device(data['device_id'])
 
-	print data['device_id']
-	if data['device_name'] in user['devices']:
-		device = get_device(data['device_id'])
-
-		if device != None:
-			device_root = ast.literal_eval(device['children'])
-			return jsonify(status="success", device_root= device_root)
-		else:
-			return jsonify(status="failure", message="device with id: {}, not found.")
+	if device != None:
+		device_root = ast.literal_eval(device['children'])
+		return jsonify(status="success", device_root= device_root)
 	else:
-		return jsonify(status="failure", message="device name: {}, not found in user: {}'s devices dict.".format(data['device_name'], email))
+		return jsonify(status="failure", message="device with id: {}, not found.")
+	
 
 def get_device(device_id):
 	ds = get_client()
@@ -607,7 +604,7 @@ def sync():
  			pass
 
  		if c_id != last_sync + 1:
- 			return jsonify(status="failure", message="batch mismatch. Current is {}, given {}".format(last_sync, c_id))
+ 			return jsonify(status="failure", error_occurence=c_id)
 
  		instr = ast.literal_eval(instr)
  		c_type = instr['type']
@@ -672,3 +669,25 @@ def sync():
 		device_upsert(device, device_id)
 
 	return jsonify(status="success", last_sync=last_sync)
+
+
+@device_crud.route('/reset')
+@auth.login_required
+def reset():
+	data = request.json
+ 	email = g.user['email']
+ 	device_id = data['device_id']
+
+ 	ds = get_client()
+ 	user = get_user(email)
+ 	device = get_device(device_id)
+
+  # Sanity check
+ 	if device == None:
+ 		return jsonify(status="failure", message="device entity not found")
+ 	else:
+ 		device['children'] = '{}'
+ 		device['last_sync'] = 0
+ 		device_upsert(device, device_upsert)
+ 		return jsonify(status="success", last_sync=device['last_sync'])
+

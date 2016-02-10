@@ -14,9 +14,13 @@
 
 from PFSServer import storage
 from gcloud import datastore
+from datetime import timedelta
+from flask import make_response, request, current_app
+from functools import update_wrapper
 from passlib.apps import custom_app_context as pwd_context
 from flask import Blueprint, current_app, redirect, render_template, request, \
     url_for, json, jsonify, g 
+from flask.ext.cors import CORS, cross_origin
 from flask.ext.httpauth import HTTPBasicAuth
 from itsdangerous import (TimedJSONWebSignatureSerializer
                           as Serializer, BadSignature, SignatureExpired)
@@ -30,6 +34,50 @@ auth = HTTPBasicAuth()
 builtin_list = list # idk what this does 
 
 user_crud = Blueprint('user_crud', __name__)
+
+
+
+
+def crossdomain(origin=None, methods=None, headers=None,
+                max_age=21600, attach_to_all=True,
+                automatic_options=True):
+    if methods is not None:
+        methods = ', '.join(sorted(x.upper() for x in methods))
+    if headers is not None and not isinstance(headers, basestring):
+        headers = ', '.join(x.upper() for x in headers)
+    if not isinstance(origin, basestring):
+        origin = ', '.join(origin)
+    if isinstance(max_age, timedelta):
+        max_age = max_age.total_seconds()
+
+    def get_methods():
+        if methods is not None:
+            return methods
+
+        options_resp = current_app.make_default_options_response()
+        return options_resp.headers['allow']
+
+    def decorator(f):
+        def wrapped_function(*args, **kwargs):
+            if automatic_options and request.method == 'OPTIONS':
+                resp = current_app.make_default_options_response()
+            else:
+                resp = make_response(f(*args, **kwargs))
+            if not attach_to_all and request.method != 'OPTIONS':
+                return resp
+
+            h = resp.headers
+
+            h['Access-Control-Allow-Origin'] = origin
+            h['Access-Control-Allow-Methods'] = get_methods()
+            h['Access-Control-Max-Age'] = str(max_age)
+            if headers is not None:
+                h['Access-Control-Allow-Headers'] = headers
+            return resp
+
+        f.provide_automatic_options = False
+        return update_wrapper(wrapped_function, f)
+    return decorator
 
 
 @user_crud.route('/resource')
@@ -50,10 +98,14 @@ def verify_password(email_or_token, password):
 
     # first try to authenticate by token
     user = verify_auth_token(email_or_token)
+    print("HERE HERE HERE HERE {}".format(email_or_token))
+
+
     if not user:
         # try to authenticate with username/password
 
         ds = get_client()
+        print "this shit should be {}".format(email_or_token)
         key = ds.key('User', str(email_or_token))
         results = ds.get(key)
         # End copy.
@@ -257,11 +309,22 @@ def add():
     
 
 
-@user_crud.route('/signin')
+@user_crud.route('/signin', methods=['GET', 'OPTIONS'])
+@cross_origin()
 @auth.login_required
 def get_auth_token():
-    token = generate_auth_token(g.user['email'])
-    return jsonify({ 'status': 'success','token': token.decode('ascii') })
+    email = g.user['email']
+    token = generate_auth_token(email)
+
+    ds = get_client()
+    key = ds.key('User', str(email))
+    results = ds.get(key)
+
+    # below was modified from: return from_datastore(results)
+    user = from_datastore(results)
+    device_count = user['device_count'] 
+    devices = json.loads(user['devices'])
+    return jsonify(status='success',token=token.decode('ascii'), device_count=device_count, devices=devices)
 # END AUTH 
 
 
@@ -308,6 +371,7 @@ def delete():
 
 @user_crud.route('/list_devices')
 @auth.login_required
+
 def list_devices():
     #return jsonify(data=request.args)
     data = request.json
@@ -371,4 +435,7 @@ def create_device():
         return jsonify(status="success", email=user['email'], device_count=user['device_count'], devices=json.loads(user['devices']), random_id=random_id)
     else:
         return jsonify(status="failure", email=user['email'], message='no user found')
+
+
+
 

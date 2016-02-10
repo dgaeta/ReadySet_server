@@ -13,11 +13,13 @@
 # limitations under the License.
 
 from flask import current_app, Flask, redirect, url_for
+from flask.ext.cors import CORS
 
 
 def create_app(config, debug=False, testing=False, config_overrides=None):
     app = Flask(__name__)
-    app.config.from_object(config)
+    CORS(app)
+    app.config.from_object(config)    
 
     app.debug = debug
     app.testing = testing

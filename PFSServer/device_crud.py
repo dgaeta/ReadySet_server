@@ -607,7 +607,7 @@ def sync():
  			pass
 
  		if c_id != last_sync + 1:
- 			return jsonify(status="failure", message="batch mismatch. Current is {}, given {}".format(last_sync, c_id))
+ 			return jsonify(status="failure", error_occurence=c_id)
 
  		instr = ast.literal_eval(instr)
  		c_type = instr['type']

@@ -194,7 +194,7 @@ def get_root(data= None, mode= "production"):
 
 	if device != None:
 		device_root = ast.literal_eval(device['children'])
-		return jsonify(status="success", device_root= device_root)
+		return jsonify(status="success", device_root= device_root, last_sync=device['last_sync'])
 	else:
 		return jsonify(status="failure", message="device with id: {}, not found.")
 	
@@ -599,12 +599,15 @@ def sync():
  	for command in commands_array:
  		c_id = command[0]
  		instr = command[3]
+ 		instr = json.loads(instr)
 
  		if c_id < last_sync:
  			pass
 
+ 		print "current instruction given is {}".format(c_id)
+ 		print "the last_sync saved is {}".format(last_sync)
  		if c_id != last_sync + 1:
- 			return jsonify(status="failure", error_occurence=c_id)
+ 			return jsonify(status="failure", error_occurence=c_id, last_sync=last_sync)
 
  		instr = ast.literal_eval(instr)
  		c_type = instr['type']
@@ -645,10 +648,16 @@ def sync():
 	  		del curr_folder['children'][path_array[-1]]
 	  		
 		elif c_type == "rename":
-			curr_folder['children'][new_name] = curr_folder['children'][old_name]
-			curr_folder['children'][new_name]['name'] = new_name
-			curr_folder['children'][new_name]['name'] = new_name
-			del curr_folder['children'][old_name]
+			new_path = instr['new_path']
+	 		new_path_array = path.split('/')
+	 		new_path_array = remove_null(path_array)
+
+	 		# save, then delete the old director 
+	 		old_object = curr_folder['children'][path_array[-1]]
+	 		old_object['name'] = new_path_array[-1]
+	 		del curr_folder['children'][path_array[-1]]
+
+			curr_folder['children'][new_path_array[-1]] = old_object
 
 		elif c_type == "unlink":		
 			del curr_folder['children'][node_name]
@@ -688,6 +697,6 @@ def reset():
  	else:
  		device['children'] = '{}'
  		device['last_sync'] = 0
- 		device_upsert(device, device_upsert)
+ 		device_upsert(device, device_id)
  		return jsonify(status="success", last_sync=device['last_sync'])
 

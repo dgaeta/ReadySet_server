@@ -299,8 +299,11 @@ def sync():
 
  		curr_folder = device
 
+ 		try:
+		commands_array = path = instr['path']
+		except KeyError, e:
+			return jsonify(status="failure", message="No path param.")
  		
- 		path = instr['path']
  		path_array = path.split('/')
  		path_array = remove_null(path_array)
 

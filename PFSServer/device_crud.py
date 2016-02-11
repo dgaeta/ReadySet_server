@@ -300,7 +300,7 @@ def sync():
  		curr_folder = device
 
  		try:
-		commands_array = path = instr['path']
+			commands_array = path = instr['path']
 		except KeyError, e:
 			return jsonify(status="failure", message="No path param.")
  		

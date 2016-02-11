@@ -24,7 +24,7 @@ from flask.ext.cors import CORS, cross_origin
 from flask.ext.httpauth import HTTPBasicAuth
 from itsdangerous import (TimedJSONWebSignatureSerializer
                           as Serializer, BadSignature, SignatureExpired)
-
+from pfs_auth import *
 
 
 auth = HTTPBasicAuth()
@@ -272,18 +272,13 @@ def view(id):
 
 @user_crud.route('/add', methods=['GET', 'POST'])
 def add():
-    
-    #data = request.form.to_dict(flat=True)
     data = request.json
-    print(data)
-    print(data['email'])
-    print(data['password'])
 
     ds = get_client()
     key = ds.key('User', str(data['email']))
     results = ds.get(key)
     user = from_datastore(results)
-    print(user)
+
     if user != None:
         return jsonify( status= "fail", error= "Email already exists.")
 
@@ -367,75 +362,5 @@ def delete():
     # delete_helper(data['email'])
     # return redirect(url_for('.list'))
     return jsonify( status= "success")
-
-
-@user_crud.route('/list_devices')
-@auth.login_required
-
-def list_devices():
-    #return jsonify(data=request.args)
-    data = request.json
-    email = g.user['email']
-    print(data)
-    #print(data['email'])
-   
-
-    ds = get_client()
-    key = ds.key('User', str(email))
-    results = ds.get(key)
-    # End copy.
-
-    # below was modified from: return from_datastore(results)
-    user = from_datastore(results)
-
-    
-    if user.get('device_count') and user['device_count'] > 0:
-        return jsonify( status="success", message="true", device_count=user['device_count'], devices=json.loads(user['devices']))
-    else:
-        return jsonify( status="success", message="no devices", device_count=0)
-    
-
-    return jsonify(status="none")
-
-@user_crud.route('/create_device')
-@auth.login_required
-def create_device():
-    data = request.json
-    email = g.user['email']
-    device_name = data['device_name']
-    random_id = device_name + '_' + email
-
-    # datastore = get_client()
-    # req = datastore.LookupRequest()
-    # req.key.extend([employee_key])
-
-    # resp = self.datastore.lookup(req)
-    # employee = resp.found[0].entity
-
-    ds = get_client()
-    key = ds.key('User', str(email))
-    results = ds.get(key)
-    # End copy.
-
-    # below was modified from: return from_datastore(results)
-    user = from_datastore(results)
-
-    if user != None:
-        if not user.get('devices'):
-            user['devices'] = "{}"
-
-        user['devices'] = json.loads(user['devices'])
-        if random_id in user['devices']:
-            return jsonify(status='error, random_id already taken')
-        else:
-            user['device_count'] += 1
-            user['devices'][random_id] = {'random_id':random_id, 'device_name': device_name}
-            user['devices'] = json.dumps(user['devices'])
-        user = upsert(user, email)
-        return jsonify(status="success", email=user['email'], device_count=user['device_count'], devices=json.loads(user['devices']), random_id=random_id)
-    else:
-        return jsonify(status="failure", email=user['email'], message='no user found')
-
-
 
 

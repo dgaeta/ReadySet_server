@@ -7,7 +7,7 @@ from flask import Blueprint, current_app, redirect, render_template, request, \
 from flask.ext.httpauth import HTTPBasicAuth
 from itsdangerous import (TimedJSONWebSignatureSerializer
                           as Serializer, BadSignature, SignatureExpired)
-
+from user_crud import *
 
 auth = HTTPBasicAuth()
 # Copied from model_datastore.py
@@ -15,7 +15,7 @@ builtin_list = list # idk what this does
 device_crud = Blueprint('device_crud', __name__)
 
 
-# START AUTH 
+# # START AUTH 
 def hash_password(password):
 	return pwd_context.encrypt(password)
 
@@ -81,8 +81,8 @@ def from_datastore(entity):
   """
   if not entity:
       return None
-  if isinstance(entity, builtin_list):
-      entity = entity.pop()
+  # if isinstance(entity, builtin_list):
+  #     entity = entity.pop()
 
   entity['id'] = entity.key.id
   return entity
@@ -126,34 +126,15 @@ def remove_null(array):
 	return array
 
 
+def recursive_dict_to_json(curr_folder):
+	if curr_folder == None:
+		return curr_folder
 
-
-@device_crud.route('/get_device')
-@auth.login_required
-def get_device(data = None, mode="production"):
-	if data == None:
-		data = request.json
-
-	if mode == "testing":
-		email = data['email']
-   	else:
-   		email = g.user['email']
-   	
-   	user = get_user(email)
-   	device_id = data['device_id']
-   	device_name = data['device_name']
- 
-
-   	if device_name in user['devices']:
-   		device = get_device(device_id)
-
-	    # Sanity check
-	   	if device == None:
-	   		return jsonify(status="failure", message="no device entity found with id: {}".format(device_id))
-	   	else:
-	   		return jsonify(status="success", device=device)
-	else:
-		return jsonify(status="failure", message="device id: {}, does not belong to user: {}".format(device_id, email))
+	if 'children' in curr_folder:
+		recursive_dict_to_json(curr_folder['children'])
+		curr_folder['children'] = json.dumps(curr_folder['children'])
+	
+	return curr_folder
 
 
 @device_crud.route('/list_devices')
@@ -179,12 +160,10 @@ def list_devices(data = None, mode="production"):
 @auth.login_required
 # PARAMS= device_id, device_name
 # RETURNS=  device_root: dict
-def get_root(data= None, mode= "production"):
-	if mode == "testing":
-		email = data['email']
-	else:
-		data = request.json
-		email = g.user['email']
+def get_root(data= None):
+	data = request.json
+
+	email = g.user['email']
 
 	user = get_user(email)
 	if user == None:
@@ -238,8 +217,8 @@ def create_device():
 	    	entity = datastore.Entity(key=key)
 	    	device = {'name': device_name, 'children': '{}', 'last_sync': 0}
 	    	#device_string = str(device)
-	    	#device_json = json.dumps(device)
-	    	entity.update(device)
+	    	device_json = json.dumps(device)
+	    	entity.update(device_json)
 	    	ds.put(entity)
 
 	    	result = from_datastore(entity)
@@ -249,7 +228,8 @@ def create_device():
 
 	    	user['device_count'] += 1
 	    	user['devices'][device_name] = {'id': device['id'], 'name': device['name']}
-	    	user['devices'] = json.dumps(user['devices'])
+	    	user_json = json.dumps(user['devices'])
+	    	user['devices'] = user_json
 	    	user = upsert(user, email)
 	    	return jsonify(status="success", email=user['email'], device_count=user['device_count'], devices=user['devices'], device_id=device['id'])
   	else:
@@ -257,344 +237,53 @@ def create_device():
 
 
 
-@device_crud.route('/delete_device')
-@auth.login_required
-def delete_device():
-	data = request.json
- 	email = g.user['email']
- 	device_name = data['device_name']
- 	device_id = data['device_id']
-
- 	ds = get_client()
- 	user = get_user(email)
- 	device = get_device(device_id)
-
-  	# Sanity check
- 	if device == None:
- 		return jsonify(status="failure", message="device entity not found")
-
-	if device_name in user['devices']:
-		del user['devices'][device_name]
-		user['devices'] = json.dumps(user['devices'])
-		upsert(user, email)
-		key = ds.key('Device', device_id)
-		ds.delete(key)
-		return jsonify(status="success", message="Device id: {}, successfully deleted.".format(device_id))
-	else:
-		return jsonify(status="failure", message="Device name: {}, does not belong to user: {}".format(device_name, email))
-
-# A node can be a folder or file 
-@device_crud.route('/create_node')
-@auth.login_required
-def create_node():
-  data = request.json
-  email = g.user['email']
-  path = data['path']
-  mode = data['mode']
-  node = data['node']
-  device_id = data['device_id']
-
-
-  ds = get_client()
-  user = get_user(email)
-  user['devices'] = ast.literal_eval(user['devices'])
-
-  if user != None:
-
-  	# Check if the device exists for this user
-  	if device_unique_id not in user['devices']:
-  		return jsonify(status='error, device_id not found')
-
-  		# Get the device 
-     	device = get_device(device_id)
-
-     	# Sanity check
-     	if device == None:
-     		return jsonify(status="failure", message="device entity not found")
-      
-     	# Go to end of path 
-     	node['children'] = {}
-     	device['children'] = ast.literal_eval(device['children'])
-     	curr_folder = device
-     	if len(path) > 1: 
-     		# Split the path string and create array 
-     		path_array = path.split('/')
-     		path_array = remove_null(path_array)
-
-     		# recurse to the correct folder 
-     		# Assumes device is not included in path 
-       	for item in path_array:
-       		curr_folder = curr_folder['children'][item]
-
-     	
-  	# Next, take the appropriate action
-  	if mode == "Create":
-  		curr_folder['children'][node['name']] = node
-
-  		device['children'] = json.dumps(device['children'])
-  		device = device_upsert(device, device['id'])
-  		return jsonify(status="success", email=user['email'], current_folder=curr_folder)
-  	else:
-  		return jsonify(status="failure", message="node method not found.")
-      
-  else:
-   	return jsonify(status="failure", email=user['email'], message='no user found')
-
-
-
-def recurse_to_path(curr_folder, path):
-	if len(path) > 1: 
-		# Split the path string and create array 
-		path_array = path.split('/')
-		path_array = remove_null(path_array)
-
-		# recurse to the correct folder 
-		# Assumes device is not included in path 
-		print path_array
-		for item in path_array:
-			if item in curr_folder['children']:
-				curr_folder = curr_folder['children'][item]
-			else:
-				return "Error"
-	return curr_folder
-
-# A node can be a folder or file 
-# PARAMS= path: string, device_id: int, device_name: String, path: String
-# RETURNS= device_count: Int, devices: dict 
-@device_crud.route('/list_children')
-@auth.login_required
-def list_children():
-	data = request.json
- 	email = g.user['email']
- 	path = data['path']
- 	device_id = data['device_id']
-
- 	ds = get_client()
- 	user = get_user(email)
-
- 	if data['device_name'] not in user['devices']:
- 		return jsonify(status="failure", message="device_name: {}, does not belong to user: {}".format(data['device_name'], email))
-  # Get the device 
- 	device = get_device(device_id)
-
-  # Sanity check
- 	if device == None:
- 		return jsonify(status="failure", message="device entity not found")
-
- 	# Recurse to path
- 	device['children'] = ast.literal_eval(device['children'])
- 	curr_folder = device
- 	curr_folder = recurse_to_path(curr_folder, path)
- 	if curr_folder == "Error":
- 		return jsonify(status="failure", message="path {} not valid on device id: {}".format(path, device_id))
-  
- 	children = json.dumps(curr_folder['children'])
- 	return jsonify(status="success", children=children)
-
-# A node can be a folder or file 
-@device_crud.route('/delete_node')
-@auth.login_required
-def delete_node():
-	data = request.json
- 	email = g.user['email']
- 	node_name = data['node_name']
- 	path = data['path']
- 	device_id = data['device_id']
-
- 	ds = get_client()
- 	user = get_user(email)
- 	device = get_device(device_id)
-
-  # Sanity check
- 	if device == None:
- 		return jsonify(status="failure", message="device entity not found")
-
- 	device['children'] = ast.literal_eval(device['children'])
- 	curr_folder = device
- 	curr_folder = recurse_to_path(curr_folder, path)
- 	if curr_folder == "Error":
- 		return jsonify(status="failure", message="path {} does not exist for device_id: {}".format(path, device_id))
-
- 	if node_name in curr_folder['children']:
- 		del curr_folder['children'][node_name]
- 		device['children'] = json.dumps(device['children'])
- 		device_upsert(device, device_id)
- 		return jsonify(status="success", message="deleted node {}".format(node_name))
- 	else:
- 		return jsonify(status="failure", message="node does not exist at this path.")
-
-
-#PARAMS: old_name: String, new_name: String, device_id: String, device_name: String
-@device_crud.route('/rename_node')
-@auth.login_required
-def rename_node():
-	data = request.json
- 	email = g.user['email']
- 	old_name = data['old_name']
- 	new_name = data['new_name']
- 	path = data['path']
- 	device_id = data['device_id']
-
-
- 	ds = get_client()
- 	user = get_user(email)
- 	device = get_device(device_id)
-
-  # Sanity check
- 	if device == None:
- 		return jsonify(status="failure", message="device entity not found")
-
- 	device['children'] = ast.literal_eval(device['children'])
- 	curr_folder = device
- 	curr_folder = recurse_to_path(curr_folder, path)
- 	if curr_folder == "Error":
- 		return jsonify(status="failure", message="path {} does not exist for device_id: {}".format(path, device_id))
-
- 	if old_name in curr_folder['children']:
- 		curr_folder['children'][new_name] = curr_folder['children'][old_name]
- 		curr_folder['children'][new_name]['name'] = new_name
- 		curr_folder['children'][new_name]['name'] = new_name
- 		del curr_folder['children'][old_name]
- 		device['children'] = json.dumps(device['children'])
- 		device_upsert(device, device_id)
- 		return jsonify(status="success", message="node renamed from {} to {}".format(old_name, new_name) )
- 	else:
- 		return jsonify(status="failure", message="node does not exist at this path.")
-
-
-@device_crud.route('/create_symlink')
-@auth.login_required
-def create_symlink():
-	data = request.json
- 	email = g.user['email']
- 	node_name = data['node_name']
- 	path = data['path'] # this is the path of where the actual node exists
- 	symlink_path = data['symlink_path'] # this is the path where the symlink will be created
- 	symlink_name = data['symlink_name']
- 	device_id = data['device_id']
- 	device_name = data['device_name']
-
-
- 	ds = get_client()
- 	user = get_user(email)
- 	device = get_device(device_id)
-
-  # Sanity check
- 	if device == None:
- 		return jsonify(status="failure", message="device entity not found")
-
- 	device['children'] = ast.literal_eval(device['children'])
- 	curr_folder = device
- 	curr_folder = recurse_to_path(curr_folder, path)
- 	if curr_folder == "Error":
- 		return jsonify(status="failure", message="path {} does not exist for device_id: {}".format(path, device_id))
-
- 	if node_name in curr_folder['children']:
- 		# Flag real node, that it has a symlink
- 		curr_folder['children'][node_name]['symlink_exists'] = 1
- 		curr_folder['children'][node_name]['symlink_path'] = symlink_path
-
- 		# Flag the symlink as a symlink
- 		symlink_folder = recurse_to_path(device, symlink_path)
- 		if symlink_folder == "Error":
- 			return jsonify(status="failure", message="path {} does not exist for device_id: {}".format(symlink_path, device_id))
-
- 		symlink_folder['children'][symlink_name] = {'is_symlink': 1, 'actual_path': path, 'actual_name': node_name}
- 		device['children'] = json.dumps(device['children'])
- 		device_upsert(device)
- 		return jsonify(status="success", message="symlink created from {} to {}".format(symlink_path, path))
- 	else:
- 		return jsonify(status="failure", message="path not valid")
-
-
-
-
-
-@device_crud.route('/get_node')
-@auth.login_required
-def get_node():
-	data = request.json
- 	email = g.user['email']
- 	node_name = data['node_name']
- 	path = data['path'] # this is the path of where the actual node exists
- 	device_id = data['device_id']
- 	device_name =data['device_name']
-
-
- 	ds = get_client()
- 	user = get_user(email)
- 	if data['device_name'] not in user['devices']:
- 		return jsonify(status="failure", message="device_name: {}, does not belong to user: {}".format(data['device_name'], email))
- 	device = get_device(device_id)
-
-  # Sanity check
- 	if device == None:
- 		return jsonify(status="failure", message="device entity not found")
-
- 	device['children'] = ast.literal_eval(device['children'])
- 	curr_folder = device
- 	curr_folder = recurse_to_path(curr_folder, path)
- 	if curr_folder == "Error":
- 		return jsonify(status="failure", message="path {} does not exist for device_id: {}".format(path, device_id))
-
- 	if node_name in curr_folder['children']:
- 		return jsonify(status="success", node=curr_folder['children'][node_name])
- 	else:
- 		return jsonify(status="failure", message="node does not exist at this path", path=path, node_name=node_name)
-
-@device_crud.route('/edit_node')
-@auth.login_required
-def edit_node():
-	data = request.json
- 	email = g.user['email']
- 	node_name = data['node_name']
- 	path = data['path'] # this is the path of where the actual node exists
- 	device_id = data['device_id']
- 	prop_name = data['prop_name']
- 	prop_value = data['prop_value']
-
-
- 	ds = get_client()
- 	user = get_user(email)
- 	device = get_device(device_id)
-
-  # Sanity check
- 	if device == None:
- 		return jsonify(status="failure", message="device entity not found")
-
- 	device['children'] = ast.literal_eval(device['children'])
- 	curr_folder = device
- 	curr_folder = recurse_to_path(curr_folder, path)
- 	if curr_folder == "Error":
- 		return jsonify(status="failure", message="path {} does not exist for device_id: {}".format(path, device_id))
-
- 	if node_name in curr_folder['children']:
- 		curr_folder[children][node_name][prop_name] = prop_value
- 		device['children'] = str(device['children'])
- 		device_upsert(device)
- 		return jsonify(status="success", message="node updated")
- 	else:
- 		return jsonify(status="failure", message="path not valid")
-
 
 @device_crud.route('/sync')
 @auth.login_required
 def sync():
 	data = request.json
- 	email = g.user['email']
- 	device_id = data['device_id']
- 	commands_array = data['commands_array']
+
+	# Get Params safely
+	try:
+		email = g.user['email']
+	except KeyError, e:
+		return jsonify(status="failure", message="No authentication data.")
+	
+	try:
+		device_id = data['device_id']
+	except KeyError, e:
+		return jsonify(status="failure", message="No device_id param.")
+ 	
+ 	try:
+		commands_array = data['commands_array']
+	except KeyError, e:
+		return jsonify(status="failure", message="No commands_array param.")
+ 	
+ 	
  	
  	ds = get_client()
  	user = get_user(email)
  	device = get_device(device_id)
 
-  # Sanity check
+  	# Sanity check
+  	if user == None:
+ 		return jsonify(status="failure", message="User entity not found.")
  	if device == None:
- 		return jsonify(status="failure", message="device entity not found")
+ 		return jsonify(status="failure", message="Device entity not found.")
 
- 	device['children'] = ast.literal_eval(device['children'])
- 	last_sync = device['last_sync']
+
+
+ 	try:
+		device['children'] = json.loads(device['children'])
+	except KeyError, e:
+		return jsonify(status="failure", message="Device entity has no children property.")
+
+ 	
+ 	try:
+		last_sync = device['last_sync']
+	except KeyError, e:
+		return jsonify(status="failure", message="Device entity has no last_sync property.")
+ 	
  	
  	for command in commands_array:
  		c_id = command[0]
@@ -603,38 +292,63 @@ def sync():
 
  		if c_id < last_sync:
  			pass
-
- 		print "current instruction given is {}".format(c_id)
- 		print "the last_sync saved is {}".format(last_sync)
  		if c_id != last_sync + 1:
  			return jsonify(status="failure", error_occurence=c_id, last_sync=last_sync)
 
- 		instr = ast.literal_eval(instr)
  		c_type = instr['type']
 
  		curr_folder = device
+
  		
  		path = instr['path']
  		path_array = path.split('/')
  		path_array = remove_null(path_array)
 
- 		print(len(path_array))
+ 		# recurse to final path level
 	   	if len(path_array) > 1: 
 	   		# recurse to the correct folder 
 	   		# Assumes device is not included in path 
 	   		for i in range(len(path_array)-1):
-	   			if isinstance(curr_folder['children'], str):
-	   				curr_folder['children'] = ast.literal_eval(curr_folder['children'])
+	   			# if isinstance(curr_folder['children'], str):
+	   			if type(curr_folder['children']) == str or type(curr_folder['children']) == unicode:
+	   				curr_folder['children'] = json.loads(curr_folder['children'])
+	   			if type(curr_folder) == str or type(curr_folder) == unicode:
+	   				curr_folder = json.loads(curr_folder)
+	   			
 	   			curr_folder = curr_folder['children'][path_array[i]]
 
+	   		if type(curr_folder) == str or type(curr_folder) == unicode:
+	   				curr_folder = json.loads(curr_folder)
+	   		
 
-	   	if isinstance(curr_folder['children'], str):
-	   				curr_folder['children'] = ast.literal_eval(curr_folder['children'])
+	   	if type(curr_folder['children']) == str or type(curr_folder['children']) == unicode:
+	   		curr_folder['children'] = json.loads(curr_folder['children'])
+	   	# else:		
+	   	
+	   	# 	curr_folder = json.loads(curr_folder)
+	   	print( device['children'])
+		print "curr folder type is {}".format(type(curr_folder))
+	   	# print(type(curr_folder))
+	   	# if isinstance(curr_folder, unicode):
+	   	# 	curr_folder = json.loads(curr_folder)
+	   	# if isinstance(curr_folder, str):
+	   	# 	curr_folder = json.loads(curr_folder)
+	   	# if isinstance(curr_folder['children'], unicode):
+	   	# 	curr_folder['children'] = json.loads(curr_folder['children'])
+	   	# if isinstance(curr_folder['children'], str):
+	   	# 			curr_folder['children'] = json.loads(curr_folder['children'])
 
 	 	if c_type == "create":
-	 		curr_folder['children'][path_array[-1]] = {'name': path_array[-1], "is_file": 1, 'is_dir': 0,
-	 			"mode": instr['mode'], "file_id": instr['file_id'], 'children': '{}'}
+			node = {'name': path_array[-1], "is_file": 1, 'is_dir': 0, "mode": instr['mode'],
+				"file_id": instr['inserted_id'],'children': json.dumps({})}
+			curr_folder['children'][node['name']] = node
 
+	  		# device['children'] = json.dumps(device['children'])
+	  		# device = device_upsert(device, device['id'])
+			# curr_folder['children'][path_array[-1]] = {'name': path_array[-1], "is_file": 1, 'is_dir': 0,"mode": instr['mode'], "file_id": instr['inserted_id'],'children': '{}'}
+	 		print("curr_folder is {}".format(curr_folder))
+	 		print("Device is now {}".format(str(device)))
+	 		
 
 	  	elif c_type == "utimens":
 	  		curr_folder['children'][path_array[-1]]["m_time"] = instr["m_time"]
@@ -649,32 +363,47 @@ def sync():
 	  		
 		elif c_type == "rename":
 			new_path = instr['new_path']
-	 		new_path_array = path.split('/')
-	 		new_path_array = remove_null(path_array)
+	 		new_path_array = new_path.split('/')
+	 		new_path_array = remove_null(new_path_array)
+
+	 		# print("in path, new path is {}".format(new_path_array))
+	 		# print("current_folder is: {}".format(str(curr_folder)))
+
+	 		# print("type of children is: {}".format(type(curr_folder['children'])))
+	 		# # if isinstance(curr_folder['children'][path_array[-1]], unicode):
+	   # # 				curr_folder['children'][path_array[-1]] = json.loads(curr_folder['children'][path_array[-1]])
+
+
 
 	 		# save, then delete the old director 
-	 		old_object = curr_folder['children'][path_array[-1]]
-	 		old_object['name'] = new_path_array[-1]
+	 		curr_folder['children'][path_array[-1]]['name'] = new_path_array[-1]
+	 		curr_folder['children'][new_path_array[-1]] = curr_folder['children'][path_array[-1]]
+	 		
 	 		del curr_folder['children'][path_array[-1]]
+		
 
-			curr_folder['children'][new_path_array[-1]] = old_object
+			if new_path_array[-1] not in curr_folder['children']:
+				return jsonify(status="Rename error, new_name not found after renaming.", error_occurence=c_id, last_sync=last_sync)
 
 		elif c_type == "unlink":		
 			del curr_folder['children'][node_name]
 			print "deleted node {}".format(node_name)
 
 	  	elif c_type == "mkdir":
-	   		curr_folder['children'][path_array[-1]] = {'name': path_array[-1], "is_file": 0, 'is_dir': 1,"mode": instr['mode'], 'children': '{}'}
+	  		#curr_folder['children'] = json.loads(curr_folder['children'])
+	   		curr_folder['children'][path_array[-1]] = {'name': path_array[-1], "is_file": 0, 'is_dir': 1, "mode": instr['mode'], 'children': json.dumps({}) }
 
 	  	elif c_type == "symlink":
 			target_path = instr['target'] # this is the path where the symlink will be created
 
-	   		curr_folder['children'][path_array[-1]] = {'name': path_array[-1], 'target_path': target_path, "is_symlink": 1,"is_file": 0, 'is_dir': 0}
+	   		curr_folder['children'][path_array[-1]] = {'name': path_array[-1], 
+	   			'target_path': target_path, "is_symlink": 1,"is_file": 0, 'is_dir': 0}
 			# print("symlink created from {} to {}".format(symlink_path, path
 
 		last_sync = c_id
 		device['last_sync'] = last_sync
-		device['children'] = json.dumps(device['children'])
+		device = recursive_dict_to_json(device)
+		#print("c_id: {}, completed. device is now {}".format(c_id, device))
 		device_upsert(device, device_id)
 
 	return jsonify(status="success", last_sync=last_sync)

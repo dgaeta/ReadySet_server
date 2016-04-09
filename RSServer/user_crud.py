@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from RSServer import storage
 from gcloud import datastore
 from datetime import timedelta
 from flask import make_response, request, current_app
@@ -25,6 +24,8 @@ from flask.ext.httpauth import HTTPBasicAuth
 from itsdangerous import (TimedJSONWebSignatureSerializer
                           as Serializer, BadSignature, SignatureExpired)
 from pfs_auth import *
+from gcloud import storage
+import base64
 
 
 auth = HTTPBasicAuth()
@@ -304,6 +305,15 @@ def add():
 
     
 
+def get_profile_pic(email):
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket('ready-set-files-bucket')
+
+    user_pic_id = "{}_{}".format(email, "prof_pic")
+    blob = bucket.get_blob(user_pic_id)
+
+    blob.download_as_string()
+
 
 @user_crud.route('/signin', methods=['GET', 'OPTIONS'])
 @cross_origin()
@@ -318,6 +328,11 @@ def get_auth_token():
 
     # below was modified from: return from_datastore(results)
     user = from_datastore(results)
+
+    if user['profile_pic']:
+        client = storage.Client(project=current_app.config['PROJECT_ID'])
+        bucket = client.bucket('ready-set-files-bucket')
+
     return jsonify(status='success', user=user, token=token.decode('ascii'))
 # END AUTH 
 
@@ -376,43 +391,55 @@ def delete():
 @auth.login_required
 def set_profile_pic():
     email = g.user['email']
-    token = generate_auth_token(email)
-    data = request.json
-    print data
+    user = get_user(email)
+    
+    uploaded_file =request.files['file']
+    print type(uploaded_file)
 
-    ds = get_client()
-    key = ds.key('User', str(email))
-    results = ds.get(key)
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket('ready-set-files-bucket')
+    print bucket
+    prof_pic_id = "{}_prof_pic".format(email)
+    blob = bucket.get_blob(prof_pic_id)
+    print blob
+    print type(blob)
+    if blob == None:
+        blob = storage.blob.Blob(prof_pic_id, bucket)
 
-    # below was modified from: return from_datastore(results)
-    user = from_datastore(results)
-    # try:
-    #     profile_pic = data['image']
-    # except KeyError:
-    #     return jsonify(status="error",  mesage="No photo data given, missing file param.") # valid token, but expired
+    doc_encoded = base64.b64encode(uploaded_file.read())
+    blob.upload_from_string(doc_encoded)
+    blob.make_public()
 
-    print(type(request.files.get('image')))
-    image_url = upload_image_file(request.files.get('image'))
-    print(image_url)
-    #image_url = upload_image_file(profile_pic)
-    # # [END image_url]
+    print blob.path
 
-    # # [START image_url2]
-    if image_url:
-        user['profile_pic'] = image_url
-    else:
-        return jsonify(status="failure", message="Didnt find the image in files")
+   
 
-    # user['profile_pic'] = profile_pic
-    # print(type(profile_pic))
-    # print(len(profile_pic))
-
-    # for key,value in profile_pic.items():
-    #     print key,value
-
+    user['prof_pic_data'] = True;
+   
     upsert(user)
     
-    return jsonify(status='success', user=user, token=token.decode('ascii'))
+    return jsonify(status='success', user=user)
+
+
+@user_crud.route('/get_profile_pic', methods=['GET', 'OPTIONS', 'POST'])
+@cross_origin()
+@auth.login_required
+def get_profile_pic():
+    email = g.user['email']
+
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket('ready-set-files-bucket')
+    print bucket
+    prof_pic_id = "{}_prof_pic".format(email)
+    blob = bucket.get_blob(prof_pic_id)
+    print type(blob)
+    if blob == None:
+        return jsonify(status="failure", message="No prof_pic data blob found.")
+
+    b64_data = blob.download_as_string()
+
+    
+    return jsonify(status='success', data=b64_data)
 
 
 

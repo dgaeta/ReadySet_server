@@ -32,7 +32,7 @@ DATA_BACKEND = 'datastore'
 
 # Google Cloud Project ID. This can be found on the 'Overview' page at
 # https://console.developers.google.com
-PROJECT_ID = 'readyset-goog'	
+PROJECT_ID = 'readyset-1334'	
 
 # Cloud Datastore dataset id, this is the same as your project id.
 DATASTORE_DATASET_ID = PROJECT_ID
@@ -63,6 +63,6 @@ MONGO_URI = \
 # You can adjust the max content length and allow extensions settings to allow
 # larger or more varied file types if desired.
 
-CLOUD_STORAGE_BUCKET = 'ready-set-files-bucket'
+CLOUD_STORAGE_BUCKET = 'readyset-files'
 MAX_CONTENT_LENGTH = 8 * 1024 * 1024
 ALLOWED_EXTENSIONS = set(['png', 'jpg', 'jpeg', 'gif'])

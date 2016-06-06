@@ -344,28 +344,25 @@ def edit():
     email = g.user['email']
     data = request.json
 
+    try:
+        user_data = data['user']
+    except KeyError, e:
+        return jsonify(status="failure", message="no file_id param.")
+
+    user_data = json.loads(user_data)
+
     ds = get_client()
     key = ds.key('User', email)
     results = ds.get(key)
     user = from_datastore(results)
-
-    firstname = data['firstname']
-    lastname = data['lastname']
-    headline = data['headline']
 
     user = get_user(email)
 
     if user == None:
         return jsonify( status="fail", message= "User not found.")
 
-    user['firstname'] = firstname
-    user['lastname'] = lastname
-    user['headline'] = headline
-    # image_url = upload_image_file(request.files.get('image'))
-    # if image_url:
-    #     data['imageUrl'] = image_url
 
-    user = upsert(user, email)
+    user = upsert(user_data, email)
 
     return jsonify(status= "success", id= user['email'])
    

@@ -35,10 +35,10 @@ def create_app(config, debug=False, testing=False, config_overrides=None):
     # Register the the CRUD blueprints.
     from .user_crud import user_crud
     from .deal_crud import deal_crud
-    # from .device_crud import device_crud
+
     app.register_blueprint(user_crud, url_prefix='/users')
     app.register_blueprint(deal_crud, url_prefix='/deals')
-    # app.register_blueprint(device_crud, url_prefix='/devices')
+
 
     # Add a default root route.
     @app.route("/")
@@ -47,6 +47,12 @@ def create_app(config, debug=False, testing=False, config_overrides=None):
 
     return app
 
+
+def get_sql_model():
+    from . import model_cloudsql
+    model = model_cloudsql
+    
+    return model
 
 def get_model():
     model_backend = current_app.config['DATA_BACKEND']
@@ -65,3 +71,4 @@ def get_model():
             "Please specify datastore, cloudsql, or mongodb")
 
     return model
+

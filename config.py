@@ -28,7 +28,7 @@ SECRET_KEY = 'secret'
 # configure the respective settings for the one you choose below.
 # You do not have to configure the other data backends. If unsure, choose
 # 'datastore' as it does not require any additional configuration.
-DATA_BACKEND = 'datastore'
+DATA_BACKEND = 'cloudsql'
 
 # Google Cloud Project ID. This can be found on the 'Overview' page at
 # https://console.developers.google.com
@@ -41,7 +41,7 @@ DATASTORE_DATASET_ID = PROJECT_ID
 # Replace user, pass, host, and database with the respective values of your
 # Cloud SQL instance.
 SQLALCHEMY_DATABASE_URI = \
-    'mysql+pymysql://user:password@host/database'
+    'mysql+pymysql://root:Readyset1!@173.194.239.156/readysetDB'
 
 # Mongo configuration
 # If using mongolab, the connection URI is available from the mongolab control
@@ -66,3 +66,6 @@ MONGO_URI = \
 CLOUD_STORAGE_BUCKET = 'readyset-files'
 MAX_CONTENT_LENGTH = 8 * 1024 * 1024
 ALLOWED_EXTENSIONS = set(['png', 'jpg', 'jpeg', 'gif'])
+
+
+

@@ -232,35 +232,13 @@ def file_upsert(data, id=None):
  	return from_datastore(entity)
 
 
-
-def remove_null(array):
-	while True:
-		try:
-			array.remove('')
-		except ValueError:
-			break
-	return array
-
-
-def recursive_dict_to_json(curr_folder):
-	if curr_folder == None:
-		return curr_folder
-
-	if 'children' in curr_folder:
-		recursive_dict_to_json(curr_folder['children'])
-		curr_folder['children'] = json.dumps(curr_folder['children'])
-	
-	return curr_folder
-
-
-
 def get_user(email):
-	ds = get_client()
-	key = ds.key('User', str(email))
-	results = ds.get(key)
- 	user = from_datastore(results)
- 	user['deals'] = ast.literal_eval(user['deals'])
- 	return user
+    ds = get_client()
+    key = ds.key('User', str(email))
+    results = ds.get(key)
+    user = from_datastore(results)
+    return user
+
 
 def get_deal(deal_id):
 	ds = get_client()
@@ -278,6 +256,26 @@ def get_file(file_id):
  	return _file
 
 
+
+
+def deal_struct(deal_name, deal_date, deal_description):
+    deal_object = {
+        'name': deal_name, 
+        'date': deal_date, 
+        'description': deal_description,
+        'document_structs': {},
+        'status': 'incomplete'
+    }
+    return deal_object
+
+
+def document_struct(file_name, google_storage_id):
+    document_object = {
+        'name': file_name,
+        'google_storage_id': google_storage_id,
+        'signed_by': {},
+    }
+    return document_object
 
 
 ############################
@@ -301,6 +299,11 @@ def initialize():
     data = request.json
     email = g.user['email']
 
+    user = get_user(email)
+
+    if user == None:
+        return jsonify(status="failure", message="no user entity found")
+
     try:
         deal_name = data['deal_name']
     except KeyError, e:
@@ -316,40 +319,77 @@ def initialize():
     except KeyError, e:
         return jsonify(status="failure", message="no description param.")
 
-    ds = get_client()
-    deal_id = "{}_{}".format(email, deal_name)
-    print deal_id
-	
-	# Check if deal already exists
+    
 
-    deal = get_deal(deal_id)
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
+    
+    company_struct_id = email + "_Company_struct"
+    blob = bucket.get_blob(company_struct_id)
+    
+    if blob == None:
+        return jsonify(status='failure', message="no company_struct blob found.")
 
-    if deal != None:
-		return jsonify(status="failure", message="deal {} already exists".format(deal_id))
+    company_struct_str = blob.download_as_string()
+    company_struct = json.loads(company_struct_str)
 
-  	
-    # Create the Device root 'Folder' Entity
-    key = ds.key('Deal', deal_id)
-    entity = datastore.Entity(key=key)
+    if deal_name in  company_struct['deal_flow_management']:
+        return jsonify(status="failure", 
+            message="deal_name {} already exists in deal flow management".format(
+                deal_name))
 
-    deal = {'deal_id': deal_id, 'date': date, 'description': description, 
-		'documents': '{}'}
-    print deal
+    deal_obj = deal_struct(deal_name, date, description)
+    company_struct['deal_flow_management'][deal_name] =  deal_obj
 
-    entity.update(deal)
-    ds.put(entity)
+    company_struct_str = json.dumps(company_struct)
+    blob.upload_from_string(company_struct_str)
 
-    result = from_datastore(entity)
-    print result
+    return jsonify(status="success", company_struct=company_struct)
+
+
+
+@deal_crud.route('/delete', methods=['GET', 'OPTIONS', 'POST'])
+@cross_origin()
+@auth.login_required
+def delete():
+    data = request.json
+    email = g.user['email']
 
     user = get_user(email)
-    print user
-    print type(user['deals'])
-    user['deals'][deal_name] = deal
-    user['deals'] = json.dumps(user['deals'])
-    upsert(user)
 
-    return jsonify(status="success", deal_id=deal_id, user=user)
+    if user == None:
+        return jsonify(status="failure", message="no user entity found")
+
+    try:
+        deal_name = data['deal_name']
+    except KeyError, e:
+        return jsonify(status="failure", message="no file_id param.")
+
+    
+
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
+    
+    company_struct_id = email + "_Company_struct"
+    blob = bucket.get_blob(company_struct_id)
+    
+    if blob == None:
+        return jsonify(status='failure', message="no company_struct blob found.")
+
+    company_struct_str = blob.download_as_string()
+    company_struct = json.loads(company_struct_str)
+
+    if deal_name not in  company_struct['deal_flow_management']:
+        return jsonify(status="failure", 
+            message="deal_name {} not in deal flow management".format(
+                deal_name))
+
+    del company_struct['deal_flow_management'][deal_name]
+
+    company_struct_str = json.dumps(company_struct)
+    blob.upload_from_string(company_struct_str)
+
+    return jsonify(status="success", company_struct=company_struct)
 
 
 
@@ -358,9 +398,16 @@ def initialize():
 @auth.login_required
 def upload_file():
     data = request.form
+    print "data is" 
     print data 
 
     email = g.user['email']
+
+    # See if file exists with Deal already
+    user = get_user(email)
+    if user == None:
+        return jsonify(status="failure", message="no user entity found.")
+
 
     uploaded_file =request.files['file']
     print type(uploaded_file)
@@ -377,69 +424,47 @@ def upload_file():
     except KeyError, e:
         return jsonify(status="failure", message="no file_type param.")
 
-    # See if file exists with Deal already
-    user = get_user(email)
-    try:
-        deal = user['deals'][deal_name]
-    except KeyError, e:
-        return jsonify(status="failure", message="User {} has no deal {}.".format(email, deal_name))
-
-    try:
-        deal = user['deals'][deal_name]
-    except KeyError, e:
-        return jsonify(status="failure", message="User {} has no deal {}.".format(email, deal_name))
-
-
-    if type(deal['documents'])== str:
-        deal['documents'] = json.loads(deal['documents'])
-
-    try:
-        doc = deal['documents']['file_name']
-        return jsonify(status="failure", message="file already exists")
-    except KeyError, e:
-        pass
-
-    deal_id = "{}_{}".format(email, deal_name)
-    deal = get_deal(deal_id)
-
-    print deal_id
-    if deal == None:
-        return jsonify(status="failure", message="deal entity not found")
-
-    ds = get_client()
-    deal_name_nospaces = deal_name.replace(" ", "")
-    file_name_nospaces = file_name.replace(" ", "")
-
-    file_id = "{}_{}_{}".format(email, deal_name_nospaces, file_name_nospaces)
-
+    
+    # Save the file object 
+    # This allows the file to be overwritter
+    google_storage_file_id = email + "_" + deal_name + "_" + file_name 
     client = storage.Client(project=current_app.config['PROJECT_ID'])
-    bucket = client.bucket('ready-set-files-bucket')
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
     print bucket
-    blob = bucket.get_blob(file_id)
+    blob = bucket.get_blob(google_storage_file_id)
     print blob
     print type(blob)
     if blob == None:
-        blob = storage.blob.Blob(file_id, bucket)
+        blob = storage.blob.Blob(google_storage_file_id, bucket)
 
     doc_encoded = base64.b64encode(uploaded_file.read())
     blob.upload_from_string(doc_encoded)
     blob.make_public()
 
-    print blob.path
+    # Update the company_stuct
+    company_struct_id = email + "_Company_struct"
+    blob = bucket.get_blob(company_struct_id)
     
-    _file = {'id': file_id, 'file_name': file_name, 'file_type': file_type, 'file_data_url': blob.path}
+    if blob == None:
+        return jsonify(status='failure', 
+            message="no company_struct blob found with id {}.".format(company_struct_id))
 
-    deal['documents'] = json.loads(deal['documents'])
-    deal['documents'][file_name] = _file
-    deal['documents'] = json.dumps(deal['documents'])
+    company_struct_str = blob.download_as_string()
+    company_struct = json.loads(company_struct_str)
 
-    print deal
-    deal_upsert(deal, deal['id'])
-    user['deals'][deal_name]['documents'][file_name] = _file
-    docs = user['deals'][deal_name]['documents']
-    user['deals'] = json.dumps(user['deals'])
-    upsert(user)
-    return jsonify(status="true", user=user, documents=docs)
+    if deal_name not in  company_struct['deal_flow_management']:
+        return jsonify(status="failure", 
+            message="deal_name {} not found in deal flow management".format(
+                deal_name))
+
+    document_obj = document_struct(file_name, google_storage_file_id)
+    company_struct['deal_flow_management'][deal_name]['document_structs'][file_name] =  document_obj
+
+    company_struct_str = json.dumps(company_struct)
+    blob.upload_from_string(company_struct_str)
+
+    return jsonify(status="success", company_struct=company_struct)
+
 
 
 @deal_crud.route('/get_document', methods=['GET', 'OPTIONS', 'POST'])
@@ -489,6 +514,8 @@ def get_document():
     else:
         return jsonify(status="success", doc_base64=doc_base64, file_type=file_type)
 
+
+
 @deal_crud.route('/exists')
 @auth.login_required
 def exists():
@@ -512,12 +539,6 @@ def exists():
   		return jsonify(status="sucess", message="non existant")
   	else:
   		return jsonify(status="success", message="existant")
-
-
-@deal_crud.route('/delete')
-@auth.login_required
-def delete():
-  	return jsonify(status=200)
 
 
 

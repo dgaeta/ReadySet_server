@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from RSServer.storage import *
 from gcloud import datastore
 from datetime import timedelta
 from flask import make_response, request, current_app
@@ -24,8 +25,13 @@ from flask.ext.httpauth import HTTPBasicAuth
 from itsdangerous import (TimedJSONWebSignatureSerializer
                           as Serializer, BadSignature, SignatureExpired)
 from pfs_auth import *
-from gcloud import storage
 import base64
+from flask import send_file
+from gcloud import storage
+import uuid
+import datetime
+
+from RSServer import get_sql_model
 
 
 auth = HTTPBasicAuth()
@@ -224,6 +230,328 @@ def upload_image_file(file):
     return public_url
 # [END upload_image_file]
 
+@user_crud.route('/signin', methods=['GET', 'OPTIONS'])
+@cross_origin()
+@auth.login_required
+def get_auth_token():
+    email = g.user['email']
+    token = generate_auth_token(email)
+
+    ds = get_client()
+    key = ds.key('User', str(email))
+    results = ds.get(key)
+
+    # below was modified from: return from_datastore(results)
+    user = from_datastore(results)
+    if user == None:
+        return jsonify(status='failure', 
+            message="no user entity found with email {}".format(email))
+
+
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
+    
+    if user['user_type'] == "company":
+          
+        company_struct_id = email + "_Company_struct"
+        blob = bucket.get_blob(company_struct_id)
+        
+        if blob == None:
+            return jsonify(status='failure', message="no company_struct blob found.")
+
+        company_struct_str = blob.download_as_string()
+        company_struct = json.loads(company_struct_str)
+
+        # notifications = get_sql_model().list_notifications(email)
+
+        return jsonify(status='success', user=user, 
+            token=token.decode('ascii'), 
+            company_struct=company_struct, user_type="company", 
+            notifications=None)
+    else:
+
+        investor_struct_id = email + "_Investor_struct"
+        blob = bucket.get_blob(investor_struct_id)
+
+        if blob == None:
+            return jsonify(status='failure', message="no investor_struct blob found.")
+
+        investor_struct_str = blob.download_as_string()
+        investor_struct = json.loads(investor_struct_str)
+        return jsonify(status="success", user=user, token=token.decode('ascii'), 
+            investor_struct=investor_struct)
+
+
+# END AUTH 
+
+
+@user_crud.route('/add', methods=['GET', 'POST'])
+def add():
+    data = request.json
+
+    ds = get_client()
+
+    email = str(data['email'])
+    key = ds.key('User', email)
+    results = ds.get(key)
+    user = from_datastore(results)
+
+    if user != None:
+        return jsonify( status= "fail", error= "Email already exists.")
+
+    data['password'] = hash_password(data['password'])
+    user = upsert(data)
+    token = generate_auth_token(user['email'])
+
+
+    # return redirect(url_for('.view', id=user['id']))
+    return jsonify( status= "success", id= user['email'], token=token, user=user)
+
+
+@user_crud.route('/add_company', methods=['GET', 'POST'])
+def add_company():
+    data = request.json
+
+    ds = get_client()
+
+    email = str(data['email'])
+    key = ds.key('User', email)
+    results = ds.get(key)
+    user = from_datastore(results)
+
+    if user != None:
+        return jsonify( status= "fail", error= "Email already exists.")
+
+    data['password'] = hash_password(data['password'])
+    user = upsert(data)
+
+
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
+
+    company_stuct_id = email + "_Company_struct"
+    blob = bucket.get_blob(company_stuct_id)
+    if blob == None:
+            blob = storage.blob.Blob(company_stuct_id, bucket)
+
+    company_stuct = {
+        'members': {
+            'board_members': { 'invited': {}, 'members': {} }, 
+            'investors': { 'invited': {}, 'members': {} }, 
+            'employees': { 'invited': {}, 'members': {} }
+        },
+        'member_permissions': {
+            'investor_permissions': 
+                {'create_events': False, 'upload_documents': False, 
+                'sign_documents': False, 'send_create_reminders': False, 'wire_money': False,
+                'view_documents_presentations_financials': False},
+            'external_services_permissions' :
+                {'create_events': False, 'upload_documents': False, 
+                'sign_documents': False, 'send_create_reminders': False, 'wire_money': False,
+                'view_documents_presentations_financials': False},
+            'team_member_permissions' :
+                {'create_events': False, 'upload_documents': False, 
+                'sign_documents': False, 'send_create_reminders': False, 'wire_money': False,
+                'view_documents_presentations_financials': False}
+        },
+        'presentation_items': {
+            'photos': {},
+            'presentation_title': ""
+        },
+        'deal_flow_management': {},
+        'funding_rounds': []
+    }
+
+    company_stuct_str = json.dumps(company_stuct)
+    blob.upload_from_string(company_stuct_str)
+
+    token = generate_auth_token(user['email'])
+
+    # return redirect(url_for('.view', id=user['id']))
+    return jsonify( status= "success", id= user['email'], token=token, user=user,
+        company_struct=company_stuct)
+
+
+@user_crud.route('/add_investor', methods=['GET', 'POST'])
+def add_investor():
+    data = request.json
+
+    ds = get_client()
+
+    email = str(data['email'])
+    key = ds.key('User', email)
+    results = ds.get(key)
+    user = from_datastore(results)
+
+    if user != None:
+        return jsonify( status= "fail", error= "Email already exists.")
+
+
+    # CREATE THE INVESTOR STRUCT IN STORAGE
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
+
+    investor_struct_id = email + "_Investor_struct"
+    blob = bucket.get_blob(investor_struct_id)
+    if blob == None:
+            blob = storage.blob.Blob(investor_struct_id, bucket)
+
+    investor_struct = {
+        'jobs': {
+        },
+        'boards': {
+        },
+        'investments': {
+        },
+    }
+
+    investor_struct_str = json.dumps(investor_struct)
+    blob.upload_from_string(investor_struct_str)
+
+
+    # CREATE THE DEFAULT PROFILE PIC IN STORAGE
+    f = open('polygons.png', 'r+')
+    image_data = f.read()
+    blob = bucket.blob("profile_pic " + email)
+
+    blob.upload_from_string(
+        image_data)
+    blob.make_public()
+
+    url = blob.public_url
+    if isinstance(url, six.binary_type):
+        url = url.decode('utf-8')
+    print "url is {}".format(url) 
+
+    data['description'] = ""
+    data['primary_role'] = ""
+    data['website'] = ""
+    data['facebook_link'] = ""
+    data['instagram_link'] = ""
+    data['linkedin_link'] = ""
+    data['twitter_link'] = ""
+    data['profile_pic'] = url
+
+    data['password'] = hash_password(data['password'])
+    user = upsert(data)
+
+
+    token = generate_auth_token(user['email'])
+
+    # return redirect(url_for('.view', id=user['id']))
+    return jsonify( status= "success", id= user['email'], token=token, user=user,
+        investor_struct=investor_struct)
+
+
+
+@user_crud.route('/get_notifications', methods=['GET'])
+@cross_origin()
+@auth.login_required
+def get_notifications():
+    email = g.user['email']
+
+    notifications, page = get_sql_model().list_notifications(email)
+
+    for note in notifications:
+        note['created_date'] = str(note['created_date'])
+        print note['created_date']
+    
+    return jsonify(status= "success", notifications= notifications)
+
+
+
+
+@user_crud.route('/set_profile_pic', methods=['GET', 'OPTIONS', 'POST'])
+@cross_origin()
+@auth.login_required
+def set_profile_pic():
+    email = g.user['email']
+    data = request.json
+    print "data is".format(data)
+
+    user = get_user(email)
+
+    if user == None:
+        return jsonify(status="failure", message="user with email {} not found".format(email))
+    
+    uploaded_file =request.files['file']
+    image_data = uploaded_file.read()
+    #print image_data
+    print type(image_data)
+    #return jsonify(status="failure", message="user with email {} not found".format(email))
+
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
+    blob = bucket.blob("profile_pic " + email)
+
+    blob.upload_from_string(
+        image_data)
+    blob.make_public()
+
+    url = blob.public_url
+    if isinstance(url, six.binary_type):
+        url = url.decode('utf-8')
+    print "url is {}".format(url) 
+
+    user['profile_pic'] = url
+    upsert(user)
+    return jsonify(status='success', user=user, url=url)
+
+
+@user_crud.route('/set_carousel_image', methods=['GET', 'OPTIONS', 'POST'])
+@cross_origin()
+@auth.login_required
+def set_carousel_image():
+    email = g.user['email']
+    data = request.json
+    print "data is".format(data)
+
+    user = get_user(email)
+
+    if user == None:
+        return jsonify(status="failure", message="user with email {} not found".format(email))
+    
+    uploaded_file =request.files['file']
+    image_data = uploaded_file.read()
+    #print image_data
+    print type(image_data)
+    #return jsonify(status="failure", message="user with email {} not found".format(email))
+
+    # Upload the image to a storage object
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
+    unique_id = email + str(uuid.uuid1())
+    blob = bucket.blob(unique_id)
+
+    blob.upload_from_string(
+        image_data)
+    blob.make_public()
+
+    url = blob.public_url
+    if isinstance(url, six.binary_type):
+        url = url.decode('utf-8')
+    print "url is {}".format(url) 
+
+    # save the url to the company struct
+    company_stuct_id = email + "_Company_struct"
+    blob = bucket.get_blob(company_stuct_id)
+    if blob == None:
+        return jsonify(status='failure', message="no company_struct blob found.")
+    
+        
+    company_struct_str = blob.download_as_string()
+    company_struct = json.loads(company_struct_str)
+
+    # add the url to the struct
+    image_struct = {'url': url, 'id': unique_id, 'caption': ""}
+    company_struct['presentation_items']['photos'][unique_id] = image_struct
+
+
+    company_struct_str = json.dumps(company_struct)
+    blob.upload_from_string(company_struct_str)
+    
+    return jsonify(status='success', company_struct=company_struct)
+
 
 
 @user_crud.route("/")
@@ -252,8 +580,6 @@ def list():
     return jsonify(users = json.dumps(users))
 
 
-
-
 @user_crud.route('/<id>')
 def view(id):
     # Copied from model_datastore.py
@@ -269,40 +595,6 @@ def view(id):
     #user = get_model().read(id)
     # return render_template("view.html", user=user)
     return jsonify(status="success", user= json.dumps(user))
-
-
-@user_crud.route('/add', methods=['GET', 'POST'])
-def add():
-    data = request.json
-
-    ds = get_client()
-
-    email = str(data['email'])
-    key = ds.key('User', email)
-    results = ds.get(key)
-    user = from_datastore(results)
-
-    if user != None:
-        return jsonify( status= "fail", error= "Email already exists.")
-
-    # If an image was uploaded, update the data to point to the new image.
-    # [START image_url]
-    # image_url = upload_image_file(request.files.get('image'))
-    # [END image_url]
-
-    # [START image_url2]
-    # if image_url:
-    #     data['imageUrl'] = image_url
-    # [END image_url2]
-
-    # hash user password 
-    data['password'] = hash_password(data['password'])
-    user = upsert(data)
-    token = generate_auth_token(user['email'])
-
-    # return redirect(url_for('.view', id=user['id']))
-    return jsonify( status= "success", id= user['email'], token=token, user=user)
-
     
 
 def get_profile_pic(email):
@@ -315,26 +607,7 @@ def get_profile_pic(email):
     blob.download_as_string()
 
 
-@user_crud.route('/signin', methods=['GET', 'OPTIONS'])
-@cross_origin()
-@auth.login_required
-def get_auth_token():
-    email = g.user['email']
-    token = generate_auth_token(email)
 
-    ds = get_client()
-    key = ds.key('User', str(email))
-    results = ds.get(key)
-
-    # below was modified from: return from_datastore(results)
-    user = from_datastore(results)
-
-    if user['profile_pic']:
-        client = storage.Client(project=current_app.config['PROJECT_ID'])
-        bucket = client.bucket('ready-set-files-bucket')
-
-    return jsonify(status='success', user=user, token=token.decode('ascii'))
-# END AUTH 
 
 
 @user_crud.route('/edit', methods=['GET', 'POST'])
@@ -348,6 +621,7 @@ def edit():
         user_data = data['user']
     except KeyError, e:
         return jsonify(status="failure", message="no file_id param.")
+
 
     user_data = json.loads(user_data)
 
@@ -364,8 +638,77 @@ def edit():
 
     user = upsert(user_data, email)
 
+
+    try:
+        new_presentation_title = data['presentation_title']
+    except KeyError, e:
+        return jsonify(status="failure", message="no presentation_title param.")
+
+    try:
+        new_member_permissions_str = data['member_permissions']
+    except KeyError, e:
+        return jsonify(status="failure", message="no member_permissions param.")
+
+
+    new_member_permissions = json.loads(new_member_permissions_str)
+
+
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
+    
+    company_struct_id = email + "_Company_struct"
+    blob = bucket.get_blob(company_struct_id)
+    
+    if blob == None:
+        return jsonify(status='failure', message="no company_struct blob found.")
+
+    company_struct_str = blob.download_as_string()
+    company_struct = json.loads(company_struct_str)
+
+    company_struct['presentation_items']['presentation_title'] = new_presentation_title
+    company_struct['member_permissions'] = new_member_permissions
+
+    
+    company_struct_str = json.dumps(company_struct)
+    blob.upload_from_string(company_struct_str)
+
     return jsonify(status= "success", id= user['email'])
    
+
+
+
+
+@user_crud.route('/investor_edit', methods=['GET', 'POST'])
+@cross_origin()
+@auth.login_required
+def investor_edit():
+    email = g.user['email']
+    data = request.json
+
+    try:
+        user_data = data['user_data']
+    except KeyError, e:
+        return jsonify(status="failure", message="no user_data param.")
+
+
+    print user_data
+
+    ds = get_client()
+    key = ds.key('User', email)
+    results = ds.get(key)
+    user = from_datastore(results)
+
+    user = get_user(email)
+
+    if user == None:
+        return jsonify( status="fail", message= "User not found.")
+
+    user = upsert(user_data, email)
+
+
+    return jsonify(status= "success", user=user)
+   
+
 
 
 @user_crud.route('/delete')
@@ -383,39 +726,136 @@ def delete():
 
 
 
-@user_crud.route('/set_profile_pic', methods=['GET', 'OPTIONS', 'POST'])
+@user_crud.route('/invite_member', methods=['GET', 'OPTIONS', 'POST'])
 @cross_origin()
 @auth.login_required
-def set_profile_pic():
+def invite_member():
     email = g.user['email']
-    user = get_user(email)
-    
-    uploaded_file =request.files['file']
-    print type(uploaded_file)
+    data = request.json
+
+    try:
+        member_type = data['member_type']
+    except KeyError, e:
+        return jsonify(status="failure", message="no member_type param.")
+
+    try:
+        invite_email = data['invite_email']
+    except KeyError, e:
+        return jsonify(status="failure", message="no invite_email param.")
+
+    try:
+        company_name = data['company_name']
+    except KeyError, e:
+        return jsonify(status="failure", message="no company_name param.")
+
+    try:
+        inviter_name = data['inviter_name']
+    except KeyError, e:
+        return jsonify(status="failure", message="no inviter_name param.")
+
 
     client = storage.Client(project=current_app.config['PROJECT_ID'])
-    bucket = client.bucket('ready-set-files-bucket')
-    print bucket
-    prof_pic_id = "{}_prof_pic".format(email)
-    blob = bucket.get_blob(prof_pic_id)
-    print blob
-    print type(blob)
-    if blob == None:
-        blob = storage.blob.Blob(prof_pic_id, bucket)
-
-    doc_encoded = base64.b64encode(uploaded_file.read())
-    blob.upload_from_string(doc_encoded)
-    blob.make_public()
-
-    print blob.path
-
-   
-
-    user['prof_pic_data'] = True;
-   
-    upsert(user)
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
     
-    return jsonify(status='success', user=user)
+    company_struct_id = email + "_Company_struct"
+    blob = bucket.get_blob(company_struct_id)
+    
+    if blob == None:
+        return jsonify(status='failure', message="no company_struct blob found.")
+
+    company_struct_str = blob.download_as_string()
+    company_struct = json.loads(company_struct_str)
+
+    a = datetime.date.today()
+    date = str(a.year) + "-" + str(a.month) + "-" + str(a.day)
+
+    notification = {
+        'invited_email': invite_email, 
+        'message': "You have been added to {} for".format(member_type.upper()), 
+        'notif_type': "invite" , 'member_type': member_type,
+        'seen': 0, 
+        'action_taken': None, 'action_required': True,
+        'company_name': company_name, 'company_email': email,
+        'created_date': date, 'created_by_name': inviter_name, 'created_by_email': email,
+        }
+
+    get_sql_model().create(notification)
+
+    company_struct['members'][member_type]['invited'][invite_email] = True
+
+    company_struct_str = json.dumps(company_struct)
+    blob.upload_from_string(company_struct_str)
+    
+    return jsonify(status='success', company_struct=company_struct)
+
+
+
+@user_crud.route('/update_member_invite', methods=['GET', 'OPTIONS', 'POST'])
+@cross_origin()
+@auth.login_required
+def update_member_invite():
+    email = g.user['email']
+    data = request.json
+
+    try:
+        notification = data['notification']
+    except KeyError, e:
+        return jsonify(status="failure", message="no notification param.")
+
+    try:
+        action_taken = data['action_taken']
+    except KeyError, e:
+        return jsonify(status="failure", message="no action_taken param.")
+
+    
+    user = get_user(email)
+    
+    if user == None:
+        return jsonify(status="failure", message="no user found param.")
+    
+    try:
+        name = user['firstname'] + " " + user['lastname']
+    except KeyError, e:
+        raise "can't access name of user"
+
+    notification['seen'] = 1
+    notification['action_taken'] = action_taken
+    get_sql_model().update(notification, notification['id'])
+
+
+
+    company_email = notification['company_email']
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
+
+
+    company_struct_id = company_email + "_Company_struct"
+    blob = bucket.get_blob(company_struct_id)
+
+    if blob == None:
+        return jsonify(status='failure', message="no company_struct blob found.")
+
+    company_struct_str = blob.download_as_string()
+    company_struct = json.loads(company_struct_str)
+
+    
+    if action_taken == "accept":
+        
+        email_suffix_url = email.replace("@", "%40")
+        profile_pic_url = "https://storage.googleapis.com/readyset-files/profile_pic%20" + email_suffix_url
+        member_type = notification['member_type']
+        company_struct['members'][member_type]['accepted'][notification['invited_email']] = {"name": name, 
+            'user_photo_url': profile_pic_url} 
+
+        company_struct_str = json.dumps(company_struct)
+        blob.upload_from_string(company_struct_str)
+
+        company_struct_str = json.dumps(company_struct)
+        blob.upload_from_string(company_struct_str)
+
+           
+    return jsonify(status='success', company_struct=company_struct)
+
 
 
 @user_crud.route('/get_profile_pic', methods=['GET', 'OPTIONS', 'POST'])
@@ -427,7 +867,7 @@ def get_profile_pic():
     client = storage.Client(project=current_app.config['PROJECT_ID'])
     bucket = client.bucket('ready-set-files-bucket')
     print bucket
-    prof_pic_id = "{}_prof_pic".format(email)
+    prof_pic_id = "profile_picture_{}".format(email)
     blob = bucket.get_blob(prof_pic_id)
     print type(blob)
     if blob == None:

@@ -29,6 +29,9 @@ def _get_storage_client():
 
 
 def _check_extension(filename, allowed_extensions):
+    print "in _check_extension"
+    print "filename is {}".format(filename)
+    print "the extension of this file is {}".format(filename.split('.').pop().lower())
     if ('.' not in filename or
             filename.split('.').pop().lower() not in allowed_extensions):
         raise BadRequest(
@@ -54,7 +57,8 @@ def upload_file(file_stream, filename, content_type):
     Uploads a file to a given Cloud Storage bucket and returns the public url
     to the new object.
     """
-    _check_extension(filename, current_app.config['ALLOWED_EXTENSIONS'])
+    #_check_extension(filename, current_app.config['ALLOWED_EXTENSIONS'])
+    print "out of _check_extension"
     filename = _safe_filename(filename)
 
     client = _get_storage_client()

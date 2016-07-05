@@ -486,32 +486,43 @@ def get_document():
     except KeyError, e:
         return jsonify(status="failure", message="no file_name param.")
 
-    deal_id = "{}_{}".format(email, deal_name)
-    deal = get_deal(deal_id)
-
-    if deal == None:
-        return jsonify(status="failure", message="No deal entity found")
-
-    deal['documents'] = json.loads(deal['documents'])
-    _file = deal['documents'][file_name]
-    file_type = _file['file_type']
-
     client = storage.Client(project=current_app.config['PROJECT_ID'])
-    bucket = client.bucket('ready-set-files-bucket')
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
 
-    deal_name_nospaces = deal_name.replace(" ", "")
-    file_name_nospaces = file_name.replace(" ", "")
-    file_id = "{}_{}_{}".format(email, deal_name_nospaces, file_name_nospaces)
-    blob = bucket.get_blob(file_id)
-    # tmp = tempfile.SpooledTemporaryFile()
-    #blob.download_to_file(tmp)
-    # print blob.public_url
-    #print type(tmp)
+    company_struct_id = email + "_Company_struct"
+    blob = bucket.get_blob(company_struct_id)
+    
+    if blob == None:
+        return jsonify(status='failure', 
+            message="no company_struct blob found with id {}.".format(company_struct_id))
+
+    company_struct_str = blob.download_as_string()
+    company_struct = json.loads(company_struct_str)
+
+    if deal_name not in  company_struct['deal_flow_management']:
+        return jsonify(status="failure", 
+            message="deal_name {} not found in deal flow management".format(
+                deal_name))
+
+    try:
+        google_storage_id = company_struct['deal_flow_management'][deal_name]['document_structs'][file_name]['google_storage_id']
+    except KeyError, e:
+        return jsonify(status="failure", 
+            message="document_struct not found for file_name {}".format(
+                file_name))
+   
+    blob = bucket.get_blob(google_storage_id)
+
+    if blob == None:
+        return jsonify(status="failure", 
+            message="no blob object found for the file data")
+
     doc_base64 = blob.download_as_string()
 
     if blob == None:
         return jsonify(status="failure", message="no blob found")
     else:
+        file_type = file_name.split(".")[-1]
         return jsonify(status="success", doc_base64=doc_base64, file_type=file_type)
 
 

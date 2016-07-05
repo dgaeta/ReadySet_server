@@ -322,12 +322,29 @@ def add_company():
     if user != None:
         return jsonify( status= "fail", error= "Email already exists.")
 
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
+
+    # CREATE THE DEFAULT PROFILE PIC IN STORAGE
+    f = open('polygons.png', 'r+')
+    image_data = f.read()
+    blob = bucket.blob("profile_pic " + email)
+
+    blob.upload_from_string(
+        image_data)
+    blob.make_public()
+
+    url = blob.public_url
+    if isinstance(url, six.binary_type):
+        url = url.decode('utf-8')
+    print "url is {}".format(url) 
+
+    data['profile_pic'] = url
     data['password'] = hash_password(data['password'])
     user = upsert(data)
 
 
-    client = storage.Client(project=current_app.config['PROJECT_ID'])
-    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
+    
 
     company_stuct_id = email + "_Company_struct"
     blob = bucket.get_blob(company_stuct_id)
@@ -356,7 +373,7 @@ def add_company():
         },
         'presentation_items': {
             'photos': {},
-            'presentation_title': ""
+            'presentation_title': "Hi! We're " + user['company_name'].upper()
         },
         'deal_flow_management': {},
         'funding_rounds': []
@@ -482,7 +499,11 @@ def set_profile_pic():
 
     client = storage.Client(project=current_app.config['PROJECT_ID'])
     bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
-    blob = bucket.blob("profile_pic " + email)
+    
+    profile_pic_id = "profile_pic " + email
+    blob = bucket.get_blob(profile_pic_id)
+    if blob == None:
+            blob = storage.blob.Blob(profile_pic_id, bucket)
 
     blob.upload_from_string(
         image_data)
@@ -552,6 +573,50 @@ def set_carousel_image():
     
     return jsonify(status='success', company_struct=company_struct)
 
+
+
+@user_crud.route('/delete_carousel_image', methods=['GET', 'OPTIONS', 'POST'])
+@cross_origin()
+@auth.login_required
+def delete_carousel_image():
+    email = g.user['email']
+    data = request.json
+
+
+    
+    try:
+        unique_id = data['unique_id']
+    except KeyError, e:
+        return jsonify(status="failure", message="no unique_id param.")
+
+    # Upload the image to a storage object
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
+    
+    try:
+        bucket.delete_blob(unique_id)
+    except NotFound:
+        pass
+
+    # delete the reference in the company struct
+    company_stuct_id = email + "_Company_struct"
+    blob = bucket.get_blob(company_stuct_id)
+    if blob == None:
+        return jsonify(status='failure', message="no company_struct blob found.")
+    
+        
+    company_struct_str = blob.download_as_string()
+    company_struct = json.loads(company_struct_str)
+
+    try:
+        del company_struct['presentation_items']['photos'][unique_id]
+    except KeyError, e:
+        return jsonify(status='failure', message="no picture struct exists with unique_id {}.".format(unique_id))
+   
+    company_struct_str = json.dumps(company_struct)
+    blob.upload_from_string(company_struct_str)
+    
+    return jsonify(status='success', company_struct_presentation_items=company_struct['presentation_items'])
 
 
 @user_crud.route("/")
@@ -771,7 +836,7 @@ def invite_member():
 
     notification = {
         'invited_email': invite_email, 
-        'message': "You have been added to {} for".format(member_type.upper()), 
+        'message': "has have been added to {} for".format(member_type.upper()), 
         'notif_type': "invite" , 'member_type': member_type,
         'seen': 0, 
         'action_taken': None, 'action_required': True,
@@ -852,6 +917,23 @@ def update_member_invite():
 
         company_struct_str = json.dumps(company_struct)
         blob.upload_from_string(company_struct_str)
+
+
+        # investor_struct_id = email + "_Investor_struct"
+        # blob = bucket.get_blob(investor_struct_id)
+
+        # investor_struct_str = blob.download_as_string()
+        # investor_struct = json.loads(investor_struct_str)
+
+        # if member_type == "employees"
+        #     role = "jobs"
+        #     entry = {"company_email": company_email, }
+        # elif member_type == "board_members":
+        #     role = "boards"
+        # elif member_type == "investors":
+        #     role = "investments"
+
+        # investor_struct[role] = {}
 
            
     return jsonify(status='success', company_struct=company_struct)

@@ -414,12 +414,9 @@ def add_investor():
             blob = storage.blob.Blob(investor_struct_id, bucket)
 
     investor_struct = {
-        'jobs': {
-        },
-        'boards': {
-        },
-        'investments': {
-        },
+        'jobs': [],
+        'boards': [],
+        'investments': [],
     }
 
     investor_struct_str = json.dumps(investor_struct)
@@ -492,6 +489,7 @@ def set_profile_pic():
         return jsonify(status="failure", message="user with email {} not found".format(email))
     
     uploaded_file =request.files['file']
+
     image_data = uploaded_file.read()
     #print image_data
     print type(image_data)
@@ -774,6 +772,170 @@ def investor_edit():
     return jsonify(status= "success", user=user)
    
 
+@user_crud.route('/investor_add_job', methods=['GET', 'POST'])
+@cross_origin()
+@auth.login_required
+def investor_add_job():
+    email = g.user['email']
+
+    form_data = request.form
+
+    print "print request.files is " 
+    print request.files 
+    
+    try:
+        new_job_company = form_data['new_job_company']
+    except KeyError, e:
+        return jsonify(status="failure", message="no new_job_company param.")
+
+    try:
+        new_job_role = form_data['new_job_role']
+    except KeyError, e:
+        return jsonify(status="failure", message="no new_job_role param.")
+
+    
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
+
+    # UPLOAD THE IMAGE 
+    uploaded_file =request.files['file']
+    image_data = uploaded_file.read()
+
+    job_pic_id = email + "_" + new_job_company + "_" + new_job_role
+    blob = bucket.get_blob(job_pic_id)
+    if blob == None:
+            blob = storage.blob.Blob(job_pic_id, bucket)
+
+    blob.upload_from_string(
+        image_data)
+    blob.make_public()
+
+    url = blob.public_url
+    if isinstance(url, six.binary_type):
+        url = url.decode('utf-8')
+    print "url is {}".format(url) 
+    # END UPLOAD IMAGE
+    
+
+    investor_struct_id = email + "_Investor_struct"
+    blob = bucket.get_blob(investor_struct_id)
+    if blob == None:
+            return jsonify(status="failure", message="no investor blob found.")
+    
+    investor_stuct_str = blob.download_as_string()
+    investor_struct = json.loads(investor_stuct_str)
+
+    if type(investor_struct['jobs']) == dict:
+        investor_struct['jobs'] = []
+
+    investor_struct['jobs'].append({"company_name": new_job_company, "company_role": new_job_role, 
+        "company_pic_url": url})
+
+    investor_struct_str = json.dumps(investor_struct)
+    blob.upload_from_string(investor_stuct_str)
+
+    return jsonify(status= "success", jobs=investor_struct['jobs'])
+
+
+
+@user_crud.route('/investor_add_board', methods=['GET', 'POST'])
+@cross_origin()
+@auth.login_required
+def investor_add_board():
+    email = g.user['email']
+    data = request.json
+
+    try:
+        new_board_role = data['new_board_role']
+    except KeyError, e:
+        return jsonify(status="failure", message="no new_board_role param.")
+
+    try:
+        new_board_company = data['new_board_company']
+    except KeyError, e:
+        return jsonify(status="failure", message="no new_board_company param.")
+    
+
+
+    # CREATE THE INVESTOR STRUCT IN STORAGE
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
+
+    investor_struct_id = email + "_Investor_struct"
+    blob = bucket.get_blob(investor_struct_id)
+    if blob == None:
+            return jsonify(status="failure", message="no investor blob found.")
+    
+    investor_stuct_str = blob.download_as_string()
+    investor_struct = json.loads(investor_stuct_str)
+
+    print investor_struct['boards']
+
+    if type(investor_struct['boards']) == dict:
+        investor_struct['boards'] = []
+
+    investor_struct['boards'].append({"company_name": new_board_company, "company_role": new_board_role})
+
+    investor_struct_str = json.dumps(investor_struct)
+    blob.upload_from_string(investor_struct_str)
+
+    return jsonify(status= "success", boards=investor_struct['boards'])
+
+
+
+
+@user_crud.route('/investor_add_investment', methods=['GET', 'POST'])
+@cross_origin()
+@auth.login_required
+def investor_add_investment():
+    email = g.user['email']
+    data = request.json
+
+    try:
+        new_investment_date = data['new_investment_date']
+    except KeyError, e:
+        return jsonify(status="failure", message="no new_investment_date param.")
+
+    try:
+        new_investment_company = data['new_investment_company']
+    except KeyError, e:
+        return jsonify(status="failure", message="no new_investment_company param.")
+
+    try:
+        new_investment_round = data['new_investment_round']
+    except KeyError, e:
+        return jsonify(status="failure", message="no new_investment_round param.")
+
+    try:
+        new_investment_details = data['new_investment_details']
+    except KeyError, e:
+        return jsonify(status="failure", message="no new_investment_details param.")
+    
+
+
+    # CREATE THE INVESTOR STRUCT IN STORAGE
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
+
+    investor_struct_id = email + "_Investor_struct"
+    blob = bucket.get_blob(investor_struct_id)
+    if blob == None:
+            return jsonify(status="failure", message="no investor blob found.")
+    
+    investor_stuct_str = blob.download_as_string()
+    investor_struct = json.loads(investor_stuct_str)
+
+
+    if type(investor_struct['investments']) == dict:
+        investor_struct['investments'] = []
+
+    investor_struct['investments'].append({"date": new_investment_date, "amount": new_investment_company, 
+        "round": new_investment_round, "details": new_investment_details})
+
+    investor_struct_str = json.dumps(investor_struct)
+    blob.upload_from_string(investor_struct_str)
+
+    return jsonify(status= "success", investments=investor_struct['investments'])
 
 
 @user_crud.route('/delete')

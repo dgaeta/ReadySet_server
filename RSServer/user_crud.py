@@ -739,6 +739,64 @@ def edit():
    
 
 
+@user_crud.route('/company_add_funding_round', methods=['GET', 'POST'])
+@cross_origin()
+@auth.login_required
+def company_add_funding_round():
+    email = g.user['email']
+
+    data = request.json
+    
+    try:
+        new_fd_date = data['new_fd_date']
+    except KeyError, e:
+        return jsonify(status="failure", message="no new_fd_date param.")
+
+    try:
+        new_fd_amount = data['new_fd_amount']
+    except KeyError, e:
+        return jsonify(status="failure", message="no new_fd_amount param.")
+
+    try:
+        new_fd_valuation = data['new_fd_valuation']
+    except KeyError, e:
+        return jsonify(status="failure", message="no new_fd_valuation param.")
+
+    try:
+        new_fd_lead_investor = data['new_fd_lead_investor']
+    except KeyError, e:
+        return jsonify(status="failure", message="no new_fd_lead_investor param.")
+
+    try:
+        new_fd_investors_count = data['new_fd_investors_count']
+    except KeyError, e:
+        return jsonify(status="failure", message="no new_fd_investors_count param.")
+
+    
+    client = storage.Client(project=current_app.config['PROJECT_ID'])
+    bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
+
+    company_struct_id = email + "_Company_struct"
+    blob = bucket.get_blob(company_struct_id)
+    if blob == None:
+            return jsonify(status="failure", message="no company blob found.")
+    
+    company_struct_str = blob.download_as_string()
+    company_struct = json.loads(company_struct_str)
+
+    if type(company_struct['funding_rounds']) == dict:
+        company_struct['funding_rounds'] = []
+
+    company_struct['funding_rounds'].append({"date": new_fd_date, "amount": new_fd_amount, 
+        "valuation": new_fd_valuation, 'lead_investor': new_fd_lead_investor, 
+        'investors_count': new_fd_investors_count})
+
+    company_struct_str = json.dumps(company_struct)
+    blob.upload_from_string(company_struct_str)
+
+    return jsonify(status= "success", funding_rounds=company_struct['funding_rounds'])
+
+
 
 
 @user_crud.route('/investor_edit', methods=['GET', 'POST'])

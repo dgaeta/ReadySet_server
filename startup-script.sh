@@ -54,15 +54,15 @@ sudo chown -R danielgaeta:danielgaeta /var/www/Readyset_server/
 cd /var/www/Readyset_server
 git init
 git pull https://github.com/dgaeta/ReadySet_server.git
-sudo cp parachutefs.com.chained.crt ~/
-sudo cp parachutefs.com.key ~/
+# sudo cp parachutefs.com.chained.crt ~/
+# sudo cp parachutefs.com.key ~/
 
 
 
 cd /var/www/Readyset_server
 
-
-source "env/bin/activate"
+virtualenv venv
+source "venv/bin/activate"
 pip install pycrypto
 
 pip install -r requirements.txt
@@ -81,8 +81,8 @@ sudo chown -R danielgaeta:danielgaeta /var/log/uwsgi
 sudo cp uwsgi.conf /etc/init/
 sudo mkdir /etc/uwsgi && sudo mkdir /etc/uwsgi/vassals
 sudo ln -s /var/www/Readyset_server/readyset_server_uwsgi.ini /etc/uwsgi/vassals
-sudo chown -R www-data:www-data /var/www/parachute_server
-sudo chown -R www-data:www-data /var/log/uwsgi/
+sudo chown -R www-data:www-data /var/www/Readyset_server
+	sudo chown -R www-data:www-data /var/log/uwsgi/
 
 sudo start uwsgi
 deactivate
@@ -105,18 +105,18 @@ sudo ln -s /opt/node/bin/npm /usr/local/bin/npm
 # End install node
 
 ls
-mkdir ~/parachute_WEB-UI
+mkdir ~/readyset_client
 ls
-cd ~/parachute_WEB-UI
+cd ~/readyset_client
 ls
 git init
-git pull https://e8628c54b74161efc46e76660e48527e0e8bcd3a@github.com/dgaeta/parachute_WEB-UI.git
+git pull https://github.com/dgaeta/readyset_client.git
 ls
 
 npm install 
 sudo npm install -g pm2@latest
 
-pm2 start ~/parachute_WEB-UI/server.js
+pm2 start ~/readyset_client/server.js
 
 ####### END WEB APP SET UP
 

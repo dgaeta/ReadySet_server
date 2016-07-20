@@ -36,8 +36,8 @@ def create_app(config, debug=False, testing=False, config_overrides=None):
     from .user_crud import user_crud
     from .deal_crud import deal_crud
 
-    app.register_blueprint(user_crud, url_prefix='/api/users')
-    app.register_blueprint(deal_crud, url_prefix='/api/deals')
+    app.register_blueprint(user_crud, url_prefix='/users')
+    app.register_blueprint(deal_crud, url_prefix='/deals')
 
 
     # Add a default root route.

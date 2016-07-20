@@ -83,6 +83,7 @@ sudo mkdir /etc/uwsgi && sudo mkdir /etc/uwsgi/vassals
 sudo ln -s /var/www/Readyset_server/readyset_server_uwsgi.ini /etc/uwsgi/vassals
 sudo chown -R www-data:www-data /var/www/Readyset_server
 	sudo chown -R www-data:www-data /var/log/uwsgi/
+sudo chown -R danielgaeta:danielgaeta /var/www/Readyset_server/
 
 sudo start uwsgi
 deactivate

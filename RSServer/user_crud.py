@@ -427,7 +427,7 @@ def add_investor():
 
 
     # CREATE THE DEFAULT PROFILE PIC IN STORAGE
-    return jsonify(status=success, cwd=str(os.getcwd()))
+    return jsonify(status="success", cwd=str(os.getcwd()))
 
     print "current working directory is " + str(os.getcwd())
     f = open('./polygons.png', 'r+')

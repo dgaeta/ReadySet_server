@@ -328,7 +328,7 @@ def add_company():
     bucket = client.bucket(current_app.config['CLOUD_STORAGE_BUCKET'])
 
     # CREATE THE DEFAULT PROFILE PIC IN STORAGE
-    f = open('polygons.png', 'r+')
+    f = open('./polygons.png', 'r+')
     image_data = f.read()
     blob = bucket.blob("profile_pic " + email)
 
@@ -427,10 +427,10 @@ def add_investor():
 
 
     # CREATE THE DEFAULT PROFILE PIC IN STORAGE
-    return jsonify(status=failure, cwd=str(os.getcwd()))
+    return jsonify(status=success, cwd=str(os.getcwd()))
 
     print "current working directory is " + str(os.getcwd())
-    f = open('polygons.png', 'r+')
+    f = open('./polygons.png', 'r+')
     image_data = f.read()
     blob = bucket.blob("profile_pic " + email)
 

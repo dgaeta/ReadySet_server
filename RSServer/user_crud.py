@@ -30,6 +30,7 @@ from flask import send_file
 from gcloud import storage
 import uuid
 import datetime
+import os 
 
 from RSServer import get_sql_model
 
@@ -424,6 +425,7 @@ def add_investor():
 
 
     # CREATE THE DEFAULT PROFILE PIC IN STORAGE
+    print "current working directory is " + str(os.getcwd())
     f = open('polygons.png', 'r+')
     image_data = f.read()
     blob = bucket.blob("profile_pic " + email)

@@ -41,7 +41,7 @@ def create_app(config, debug=False, testing=False, config_overrides=None):
 
 
     # Add a default root route.
-    @app.route("/api")
+    @app.route("/")
     def index():
         return redirect(url_for('user_crud.list'))
 

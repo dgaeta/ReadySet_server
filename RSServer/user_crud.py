@@ -310,6 +310,7 @@ def add():
 
 
 @user_crud.route('/add_company', methods=['GET', 'POST'])
+@cross_origin()
 def add_company():
     data = request.json
 
@@ -391,6 +392,7 @@ def add_company():
 
 
 @user_crud.route('/add_investor', methods=['GET', 'POST'])
+@cross_origin()
 def add_investor():
     data = request.json
 
@@ -426,7 +428,7 @@ def add_investor():
 
     # CREATE THE DEFAULT PROFILE PIC IN STORAGE
     return jsonify(status=failure, cwd=str(os.getcwd()))
-    
+
     print "current working directory is " + str(os.getcwd())
     f = open('polygons.png', 'r+')
     image_data = f.read()
